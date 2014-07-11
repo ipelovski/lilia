@@ -1,4 +1,4 @@
 lilia
 =====
 
-A dialect of the Scheme programming language running in the browser.
+A Scheme-like programming language running in the browser.
