@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>Scheme Code Editor</title>
+	<link rel="stylesheet" type="text/css" href="lib/codemirror.css" />
+	<link rel="stylesheet" type="text/css" href="lib/monokai.css" />
+	<script type="text/javascript" src="lib/codemirror.js"></script>
+	<script type="text/javascript" src="lib/scheme.js"></script>
+	<script type="text/javascript" src="lib/closebrackets.js"></script>
+	<script type="text/javascript" src="lib/matchbrackets.js"></script>
+	<script type="text/javascript" src="../common.js"></script>
+  <script type="text/javascript" src="../lang-table.js"></script>
+  <script type="text/javascript" src="../lang-en.js"></script>
+  <script type="text/javascript" src="../lang-bg.js"></script>
+	<script type="text/javascript" src="../lexer.js"></script>
+	<script type="text/javascript" src="../parser.js"></script>
+	<script type="text/javascript" src="../evaluator.js"></script>
+	<style type="text/css" media="screen">
+		body {
+			background-color: #272822;
+			/*background: linear-gradient(bisque, goldenrod);
+			height: 1000px;*/
+		}
+		textarea:focus, input:focus {
+	    outline: 0;
+		}
+		#button-run {
+			/*background-color: darkgreen;*/
+			background: linear-gradient(forestgreen, darkgreen);
+			border: none;
+			border-radius: 10px;
+			padding: 10px;
+			font-weight: bold;
+			font-size: medium;
+			color: blanchedalmond;
+			text-transform: uppercase;
+			margin-bottom: 10px;
+		}
+		div.CodeMirror {
+			border-radius: 10px;
+			border: solid 2px coral;
+		}
+		#cursor-position {
+			color: blanchedalmond;
+		}
+		#console-container {
+			/*text-align: center;*/
+		}
+		#console {
+			width: 800px;
+			height: 50px;
+			resize: none;
+			border-radius: 10px;
+			margin-top: 10px;
+			/*background-color: coral;*/
+			margin-top: 10px;
+			background: linear-gradient(coral, chocolate);
+			font-weight: 900;
+			font-size: 16px;
+			color: maroon;
+			border: none;
+		}
+	</style>
+</head>
+<body>
+	<input id="button-run" type="button" value="&#9654; Run" />
+	<textarea id="editor">
+	</textarea>
+	<div id="cursor-position"></div>
+	<div id="console-container">
+		<textarea id="console"></textarea>
+	</div>
+	<script type="text/javascript">
+		function showCursorPosition() {
+			var pos = codeEditor.getCursor();
+			document.getElementById('cursor-position').innerText = 'Line ' + (pos.line + 1) + ', Column ' + (pos.ch + 1);
+		}
+		var codeEditor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+			theme: 'monokai',
+			indentUnit: 4,
+			lineNumbers: true,
+			matchBrackets: true,
+			autoCloseBrackets: true,
+			autofocus: true,
+		});
+		codeEditor.setSize(800, 400);
+		codeEditor.on('cursorActivity', showCursorPosition);
+		codeEditor.setValue(';start here\n');
+		codeEditor.setCursor(1, 0);
+		showCursorPosition();
+		var evaluate = evaluator.initEval('en');
+		function consolelog(text) {
+			document.getElementById('console').value = '> ' + text;
+		}
+		function runScheme() {
+			var input = codeEditor.getValue();
+			var result;
+			try {
+				result = evaluate(input);
+			}
+			catch (err) {
+				result = err.toString();
+				if (typeof err.line === 'number') {
+					codeEditor.setCursor(err.line - 1, err.column - 1);
+				}
+			}
+			consolelog(result);
+			codeEditor.focus();
+		}
+		document.getElementById('button-run').addEventListener('click', runScheme);
+		consolelog('');
+	</script>
+</body>
+</html>
