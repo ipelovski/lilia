@@ -1,3 +1,10 @@
+/*
+A simple evaluator based on the grammer of r7rs small.
+Evaluates programming code by transforming it
+to an abstract syntax tree and then executs it.
+NOTE: the implementation was first based on r4rs
+so it needs a revision for r7rs correctness.
+*/
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define(['lexer', 'parser', 'langTable'], factory);
@@ -151,22 +158,6 @@
     }
     return false;
   }
-  // function isImproperList(list) {
-  //   var cdr;
-  //   while (list instanceof Pair) {
-  //     cdr = list.cdr;
-  //     if (cdr instanceof Pair) {
-  //       list = cdr;
-  //     }
-  //     else if (cdr === EmptyList) {
-  //       return false;
-  //     }
-  //     else {
-  //       return true;
-  //     }
-  //   }
-  //   return false;
-  // }
   function createVector(args, env, immutable) {
     return new Vector(args, immutable);
   }
@@ -359,7 +350,7 @@
       guardArgPredicate(env, k, primitiveFunctions['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
       var arr = args[0].value;
       if (k > arr.length - 1) {
-        raiseRuntimeError(env, 'index_out_range', [arr.length]);
+        raiseRuntimeError(env, 'vector_index_out_range', [arr.length]);
       }
       return arr[k];
     },
@@ -371,7 +362,7 @@
       guardImmutable(env, args[0]);
       var arr = args[0].value;
       if (k > arr.length - 1) {
-        raiseRuntimeError(env, 'index_out_range', [arr.length]);
+        raiseRuntimeError(env, 'vector_index_out_range', [arr.length]);
       }
       arr[k] = args[2];
       return Unspecified;
@@ -575,7 +566,7 @@
         }
         else if (formals[formals.length - 2] === '.') {
           if (formals.length -1 > actualArgs.length) {
-            raiseRuntimeError(env, 'wrong_min_args_count', [formals.length, actualArgs.length]);
+            raiseRuntimeError(env, 'min_args_count_expected', [formals.length, actualArgs.length]);
           }
           for (i = 0; i < formals.length - 2; i++) {
             procEnv.addVar(formals[i], actualArgs[i]);
@@ -584,7 +575,7 @@
         }
         else {
           if (formals.length !== actualArgs.length) {
-            raiseRuntimeError(env, 'wrong_args_count', [formals.length, actualArgs.length]);
+            raiseRuntimeError(env, 'exact_args_count_expected', [formals.length, actualArgs.length]);
           }
           for (i = 0; i < formals.length; i++) {
             procEnv.addVar(formals[i], actualArgs[i]);
@@ -608,7 +599,7 @@
   }
   function evaluate(text, lang) {
     lang = lang || 'en';
-    var forms = parser.analyze(text, lang);
+    var forms = parser.parse(text, lang);
     return evalProgram(forms, lang);
   }
   function initEval(lang) {
@@ -616,7 +607,7 @@
     var env = new Environment();
     addPrimitivesAndLang(env, lang);
     return function evalFragment(text) {
-      var forms = parser.analyze(text);
+      var forms = parser.parse(text, lang);
       return evalForms(forms, env);
     };
   }
@@ -624,20 +615,4 @@
     evaluate: evaluate,
     initEval: initEval
   };
-
-  // var text = '\
-  // (define a 1)\n\
-  // (set! a 2)\n\
-  // (define foo (lambda (x) (+ a x)))\n\
-  // (foo 4)\n\
-  // ((lambda (x) x) #t)';
-  // var tree = parser.analyze(text);
-  // var result;
-  // try {
-  //   result = evalProgram(tree);
-  // }
-  // catch (err) {
-  //   console.log(err.toString());
-  // }
-  // console.log(result);
 }));
