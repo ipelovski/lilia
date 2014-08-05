@@ -20,6 +20,7 @@
 	<style type="text/css" media="screen">
 		body {
 			background-color: #272822;
+			color: blanchedalmond;
 			/*background: linear-gradient(bisque, goldenrod);
 			height: 1000px;*/
 		}
@@ -42,9 +43,6 @@
 			border-radius: 10px;
 			border: solid 2px coral;
 		}
-		#cursor-position {
-			color: blanchedalmond;
-		}
 		#console-container {
 			/*text-align: center;*/
 		}
@@ -65,6 +63,16 @@
 	</style>
 </head>
 <body>
+	<div>
+		<div>
+			<input type="radio" id="en-en-lang" name="syntax-msg-lang" value="en-en" checked="checked" />
+			<label for="en-en-lang">Syntax and messages in Enlish</label>
+		</div>
+		<div>
+			<input type="radio" id="bg-bg-lang" name="syntax-msg-lang" value="bg-bg" />
+			<label for="bg-bg-lang">Синтаксис и съобщения на български</label>
+		</div>
+	</div>
 	<input id="button-run" type="button" value="&#9654; Run" />
 	<textarea id="editor">
 	</textarea>
@@ -110,6 +118,12 @@
 			codeEditor.focus();
 		}
 		document.getElementById('button-run').addEventListener('click', runScheme);
+		document.getElementById('en-en-lang').addEventListener('click', function() {
+			evaluate = evaluator.initEval('en');
+		});
+		document.getElementById('bg-bg-lang').addEventListener('click', function() {
+			evaluate = evaluator.initEval('bg');
+		});
 		consolelog('');
 	</script>
 </body>

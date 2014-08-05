@@ -1,3 +1,6 @@
+/*
+A module containing common functions.
+*/
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define([], factory);
@@ -7,6 +10,7 @@
     factory();
   }
 }(this, function () {
+  // Formats a string similar to the .net String.Format() method.
   if (!String.format) {
     String.format = function(format, args) {
       if (!Array.isArray(args)) {

@@ -1,3 +1,9 @@
+/*
+A simple parser based on the grammer of r7rs small.
+Transforms a stream of tokens to an abstract syntax tree.
+NOTE: the implementation was first based on r4rs
+so it needs a revision for r7rs correctness.
+*/
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define(['lexer'], factory);
@@ -9,6 +15,7 @@
 }(this, function (lexer, langTable) {
   var TokenTypes = lexer.TokenTypes;
 
+  // The values used to tag special forms.
   var FormTypes = {
     program: 'program',
     variable: 'variable',
@@ -24,22 +31,27 @@
     derived: 'derived', // TODO
   };
 
-  var Syntax = null;
+  // A cache for syntax keywords for a given natural language.
+  var syntax = null;
+  // A cache for syntaxes of all natural languages.
   var syntaxCache = {};
+  // Holds the currently used natural language. A string.
   var currentLang = null;
+  // Extracts values from the language tables and stores them
+  // in the syntax caches.
   function populateSyntax(lang) {
     if (currentLang === lang) {
       return;
     }
     var existingSyntax = syntaxCache[lang];
     if (existingSyntax) {
-      Syntax = existingSyntax;
+      syntax = existingSyntax;
     }
     else {
       var get = function get(key) {
         return langTable.get(lang, 'syntax', key);
       };
-      Syntax = syntaxCache[lang] = {
+      syntax = syntaxCache[lang] = {
         'quote': get('quote'),
         'lambda': get('lambda'),
         'if': get('if'),
@@ -62,44 +74,22 @@
         'unquote-splicing': get('unquote-splicing'),
       };
     }
-    populateExpressionKeywords();
-    populateSyntaxKeywords();
     currentLang = lang;
   }
-
-  var expressionKeywords = null;
-  function populateExpressionKeywords () {
-    expressionKeywords = 
-      [Syntax['quote'],
-       Syntax['lambda'],
-       Syntax['if'],
-       Syntax['set!'],
-       Syntax['begin'],
-       Syntax['cond'],
-       Syntax['and'],
-       Syntax['or'],
-       Syntax['case'],
-       Syntax['let'],
-       Syntax['let*'],
-       Syntax['letrec'],
-       Syntax['do'],
-       Syntax['delay'],
-       Syntax['quasiquote']];
+  // Checks if a token object is tagged as an identifier.
+  function isIdentifier(token) {
+    return token.type === TokenTypes.identifier;
   }
-  function isExpressionKeyword(token) {
-    return token.type === TokenTypes.identifier &&
-      expressionKeywords.indexOf(token.value) !== -1;
+  // Checks if a token object contains a syntax keyword.
+  function isSyntaticKeyword(token) {
+    return isIdentifier(token) && token.value in syntax;
   }
-  var syntaticKeywords = null;
-  function populateSyntaxKeywords() {
-    syntaticKeywords = 
-      [Syntax['else'],
-       Syntax['=>'],
-       Syntax['define'],
-       Syntax['unquote'], 
-       Syntax['unquote-splicing']];
+  // Checks if a token object contains a variable.
+  function isVariable(token) {
+    return isIdentifier(token) && !(token.value in syntax);
   }
 
+  // A constructor for an AST node containing a definition.
   function createDefinition(identifier, value) {
     return {
       type: FormTypes.definition,
@@ -107,6 +97,7 @@
       value: value
     };
   }
+  // A constructor for an AST node containing an assignment.
   function createAssignment(identifier, value) {
     return {
       type: FormTypes.assignment,
@@ -114,6 +105,7 @@
       value: value
     };
   }
+  // A constructor for an AST node containing an 'if' conditional.
   function createConditional(test, consequent, alternate) {
     return {
       type: FormTypes.conditional,
@@ -122,6 +114,7 @@
       alternate: alternate
     };
   }
+  // A constructor for an AST node containing a procedure call.
   function createProcedureCall(procedure, args) {
     return {
       type: FormTypes.procedureCall,
@@ -129,6 +122,7 @@
       arguments: args
     };
   }
+  // A constructor for an AST node containing a lambda definition.
   function createLambda(formals, body) {
     return {
       type: FormTypes.lambda,
@@ -136,24 +130,28 @@
       body: body
     };
   }
+  // A constructor for an AST node containing an 'and' expression.
   function createConjunction(tests) {
     return {
       type: FormTypes.conjunction,
       tests: tests
     };
   }
+  // A constructor for an AST node containing an 'or' expression.
   function createDisjunction(tests) {
     return {
       type: FormTypes.disjunction,
       tests: tests
     };
   }
+  // A constructor for an AST node containing a variable evaluation.
   function createVariable(identifier) {
     return {
       type: FormTypes.variable,
       identifier: identifier
     };
   }
+  // A constructor for an AST node containing a self-evaluating literal.
   function createLiteral(type, value) {
     return {
       type: FormTypes.literal,
@@ -163,6 +161,7 @@
       }
     };
   }
+  // A constructor for an AST node containing a sequence of forms.
   function createBegin(forms) {
     return {
       type: FormTypes.begin,
@@ -170,18 +169,8 @@
     };
   }
 
-  function isSyntaticKeyword(token) {
-    return isExpressionKeyword(token) ||
-      (token.type === TokenTypes.identifier &&
-      syntaticKeywords.indexOf(token.value) !== -1);
-  }
-  function isIdentifier(token) {
-    return token.type === TokenTypes.identifier;
-  }
-  function isVariable(token) {
-    return isIdentifier(token) && !isSyntaticKeyword(token);
-  }
-
+  // Raises an error by throwing it.
+  // This function is used only in the parser.
   function raiseError(tokenStream, messageKey, messageParams) {
     var message = langTable.get(currentLang, 'syntax-errors', messageKey);
     if (messageParams) {
@@ -198,12 +187,8 @@
     throw err;
   }
 
-  function analyze(text, lang) {
-    lang = lang || 'en';
-    populateSyntax(lang, lang);
-    var tokenStream = new lexer.TokenStream(text, lang);
-    return readProgram(tokenStream);
-  }
+  // Reads the alternate expression in an 'if' form
+  // from the given token stream.
   function readAlternate(tokenStream) {
     var token = tokenStream.peek();
     if (!token) {
@@ -214,6 +199,7 @@
     }
     return readExpression(tokenStream);
   }
+  // Reads an 'if' expression from the given token stream.
   function readConditional(tokenStream) {
     var token = tokenStream.peek();
     if (!token) {
@@ -228,6 +214,7 @@
     }
     return createConditional(test, consequent, alternate);
   }
+  // Reads procedure call from the given token stream.
   function readProcedureCall(tokenStream) {
     var token;
     var procedure = readExpression(tokenStream);
@@ -246,6 +233,8 @@
     }
     return createProcedureCall(procedure, args);
   }
+  // Reads the formal parameters of a lambda expression
+  // from the given token stream.
   function readLambdaFormals(tokenStream) {
     var token = tokenStream.advance();
     if (!token) {
@@ -293,6 +282,8 @@
       raiseError(tokenStream, 'invalid_lambda_formals');
     }
   }
+  // Reads a sequence of forms that are a part of another form
+  // from the given token stream.
   function readBody(tokenStream, missingBodyExpressionsErrorKey) {
     var forms = [];
     var definition = readDefintion(tokenStream);
@@ -310,9 +301,13 @@
     }
     return forms;
   }
+  // Reads the body forms of a lambda expression
+  // from the given token stream.
   function readLambdaBody(tokenStream) {
     return readBody(tokenStream, 'no_lambda_body_exprs');
   }
+  // Traverses a subtree of an AST and marks the nodes
+  // in a tail context by adding a boolean property to them.
   function markTailContext(expression) {
     if (expression.type === FormTypes.conditional) {
       markTailContext(expression.consequent);
@@ -338,6 +333,8 @@
       }
     }
   }
+  // Reads a lambda expression
+  // from the given token stream.
   function readLambda(tokenStream) {
     var formals = readLambdaFormals(tokenStream);
     var body = readLambdaBody(tokenStream);
@@ -351,6 +348,7 @@
     markTailContext(body[body.length - 1]);
     return createLambda(formals, body);
   }
+  // Checks if a token object represents a self-evaluating expression.
   function isSelfEvaluating(token) {
     var tokenType = token.type;
     return tokenType === TokenTypes.boolean ||
@@ -358,6 +356,8 @@
        tokenType === TokenTypes.character ||
        tokenType === TokenTypes.string;
   }
+  // Reads the storing of a value to a location
+  // from the given token stream.
   function readValueAssignment(tokenStream, constructor, formName) {
     var token = tokenStream.advance();
     if (!token || !isVariable(token)) {
@@ -381,6 +381,8 @@
     }
     return constructor(variable, expression);
   }
+  // Reads the variable name and the formal parameters of a lambda definition
+  // from the given token stream.
   function readDefintionHeader(tokenStream) {
     var token = tokenStream.advance();
     if (!token || !isVariable(token)) {
@@ -424,6 +426,7 @@
       raiseError(tokenStream, 'expected_lambda_formals_end');
     }
   }
+  // Reads a defintion form from the given token stream.
   function readDefintion(tokenStream) {
     var token = tokenStream.peek();
     var nextToken;
@@ -436,7 +439,7 @@
       if (!nextToken) {
         raiseError(tokenStream, 'list_end_unexpected');
       }
-      if (isIdentifier(nextToken) && nextToken.value === Syntax['define']) {
+      if (isIdentifier(nextToken) && nextToken.value === syntax['define']) {
         tokenStream.advance(2);
         token = tokenStream.peek();
         if (!token) {
@@ -463,9 +466,13 @@
     }
     return null;
   }
+  // Reads a 'set!' expression
+  // from the given token stream.
   function readAssignment(tokenStream) {
     return readValueAssignment(tokenStream, createAssignment, langTable.get(currentLang, 'syntax-common', 'assignment')); // TODO cache
   }
+  // Reads an 'and' or an 'or' expressions
+  // from the given token stream.
   function readBoolOperations(tokenStream, syntaxKey, constructor) {
     var tests = []
     var expression = readExpression(tokenStream);
@@ -475,16 +482,18 @@
     }
     var token = tokenStream.advance();
     if (!token) {
-      raiseError(tokenStream, 'expr_end_unexpected', [Syntax[syntaxKey]]);
+      raiseError(tokenStream, 'expr_end_unexpected', [syntax[syntaxKey]]);
     }
     if (token.type !== TokenTypes.rightParen) {
-      raiseError(tokenStream, 'right_paren_expected', [Syntax[syntaxKey]]);
+      raiseError(tokenStream, 'right_paren_expected', [syntax[syntaxKey]]);
     }
     return constructor(tests);
   }
+  // Reads an 'and' expressions from the given token stream.
   function readConjunction(tokenStream) {
     return readBoolOperations(tokenStream, 'and', createConjunction);
   }
+  // Reads an 'or' expressions from the given token stream.
   function readDisjunction(tokenStream) {
     return readBoolOperations(tokenStream, 'or', createDisjunction);
   }
@@ -493,6 +502,8 @@
       raiseError(tokenStream, 'let_binding_end_unexpected');
     }
   }
+  // Reads a binding in a 'let' expression
+  // from the given token stream.
   function readBinding(tokenStream) {
     var token = tokenStream.advance();
     guardLetBinding(tokenStream, token);
@@ -522,6 +533,8 @@
       init: init
     };
   }
+  // Reads the bindings in a 'let' expression
+  // from the given token stream.
   function readBindings(tokenStream) {
     var bindings = [];
     var binding = readBinding(tokenStream);
@@ -531,6 +544,8 @@
     }
     return bindings;
   }
+  // Reads the body forms of a 'let' expression
+  // from the given token stream.
   function readLetBody(tokenStream) {
     return readBody(tokenStream, 'no_let_body_exprs');
   }
@@ -539,6 +554,8 @@
       raiseError(tokenStream, 'let_end_unexpected');
     }
   }
+  // Reads a 'let' expression
+  // from the given token stream.
   function readLet(tokenStream) {
     var token = tokenStream.advance();
     guardLet(tokenStream, token);
@@ -583,6 +600,8 @@
       return createProcedureCall(enclosingProcedure, []);
     }
   }
+  // Reads a 'begin' expression
+  // from the given token stream.
   function readBegin(tokenStream) {
     var forms = [];
     var expression = readExpression(tokenStream);
@@ -595,13 +614,14 @@
     }
     var token = tokenStream.advance();
     if (!token) {
-      raiseError(tokenStream, 'expr_end_unexpected', [Syntax['begin']]);
+      raiseError(tokenStream, 'expr_end_unexpected', [syntax['begin']]);
     }
     if (token.type !== TokenTypes.rightParen) {
-      raiseError(tokenStream, 'right_paren_expected', [Syntax['begin']]);
+      raiseError(tokenStream, 'right_paren_expected', [syntax['begin']]);
     }
     return createBegin(forms);
   }
+  // A constant containing the types of simple data
   var simpleDatums = [
     TokenTypes.boolean,
     TokenTypes.number,
@@ -610,6 +630,7 @@
     TokenTypes.identifier
     // TODO byte vector
   ];
+  // Reads a simple datum from the given token stream.
   function readSimpleDatum(tokenStream) {
     var token = tokenStream.peek();
     if (simpleDatums.indexOf(token.type) !== -1) {
@@ -618,6 +639,7 @@
     }
     return null;
   }
+  // Reads a list datum from the given token stream.
   function readListDatum(tokenStream) {
     var listItems = [];
     var literal = readDatum(tokenStream);
@@ -653,6 +675,7 @@
       raiseError(tokenStream, 'expected_list_end');
     }
   }
+  // Reads a vector datum from the given token stream.
   function readVectorDatum(tokenStream) {
     var vectorItems = [];
     var literal = readDatum(tokenStream);
@@ -671,6 +694,7 @@
       raiseError(tokenStream, 'expected_vector_end');
     }
   }
+  // Reads a list or a vector datum from the given token stream.
   function readCompoundDatum(tokenStream) {
     var token = tokenStream.peek();
     if (token.type === TokenTypes.leftParen) {
@@ -684,6 +708,7 @@
     return null;
     // TODO read abbreviations
   }
+  // Reads a single datum from the given token stream.
   function readDatum(tokenStream, raise) {
     var datum = readSimpleDatum(tokenStream) || readCompoundDatum(tokenStream);
     if (!datum && raise) {
@@ -691,30 +716,26 @@
     }
     return datum;
   }
-  function readData(tokenStream) {
-    var token = tokenStream.advance();
-    if (!token) {
-      raiseError(tokenStream, 'datum_end_unexpected');
-    }
-    return readDatum(tokenStream, true);
-  }
+  // Reads a quote literal from the given token stream.
   function readQuote(tokenStream) {
     var datum = readDatum(tokenStream);
     var token = tokenStream.advance();
     if (!token) {
-      raiseError(tokenStream, 'expr_end_unexpected', [Syntax['quote']]);
+      raiseError(tokenStream, 'expr_end_unexpected', [syntax['quote']]);
     }
     if (token.type !== TokenTypes.rightParen) {
-      raiseError(tokenStream, 'right_paren_expected', [Syntax['quote']]);
+      raiseError(tokenStream, 'right_paren_expected', [syntax['quote']]);
     }
     return datum;
   }
+  // Reads any expression from the given token stream.
   function readExpression(tokenStream) {
     var token = tokenStream.peek();
     var nextToken;
     if (!token) {
       return null;
     }
+    // If it is a lone variable then it will be evaluated.
     if (isIdentifier(token)) {
       if (!isSyntaticKeyword(token)) {
         tokenStream.advance();
@@ -724,18 +745,23 @@
         raiseError(tokenStream, 'syntax_keywords_as_variables');
       }
     }
+    // Checks if it is a self-evaluating expression, e.g. a string literal.
     if (isSelfEvaluating(token)) {
       tokenStream.advance();
       return createLiteral(token.type, token.value);
     }
+    // If it is an openning vector parenthesis then reads the whole vector.
     if (token.type === TokenTypes.vectorParen) {
       tokenStream.advance();
       return readVectorDatum(tokenStream);
     }
+    // If it is a quotation then reads the quoted datum.
     if (token.type === TokenTypes.quote) {
       tokenStream.advance();
       return readDatum(tokenStream);
     }
+    // If it is an openning parenthesis
+    // then tries to read a specific expression.
     if (token.type === TokenTypes.leftParen) {
       tokenStream.advance();
       nextToken = tokenStream.peek();
@@ -743,35 +769,35 @@
         raiseError(tokenStream, 'list_end_unexpected');
       }
       if (isIdentifier(nextToken)) {
-        if (nextToken.value === Syntax['if']) {
+        if (nextToken.value === syntax['if']) {
           tokenStream.advance();
           return readConditional(tokenStream);
         }
-        if (nextToken.value === Syntax['lambda']) {
+        if (nextToken.value === syntax['lambda']) {
           tokenStream.advance();
           return readLambda(tokenStream);
         }
-        if (nextToken.value === Syntax['set!']) {
+        if (nextToken.value === syntax['set!']) {
           tokenStream.advance();
           return readAssignment(tokenStream);
         }
-        if (nextToken.value === Syntax['and']) {
+        if (nextToken.value === syntax['and']) {
           tokenStream.advance();
           return readConjunction(tokenStream);
         }
-        if (nextToken.value === Syntax['or']) {
+        if (nextToken.value === syntax['or']) {
           tokenStream.advance();
           return readDisjunction(tokenStream);
         }
-        if (nextToken.value === Syntax['let']) {
+        if (nextToken.value === syntax['let']) {
           tokenStream.advance();
           return readLet(tokenStream);
         }
-        if (nextToken.value === Syntax['begin']) {
+        if (nextToken.value === syntax['begin']) {
           tokenStream.advance();
           return readBegin(tokenStream);
         }
-        if (nextToken.value === Syntax['quote']) {
+        if (nextToken.value === syntax['quote']) {
           tokenStream.advance();
           return readQuote(tokenStream);
         }
@@ -783,10 +809,17 @@
     }
     return null;
   }
+  // Reads an expression or a definition from the given token stream.
   function readCommandOrDefinition(tokenStream) {
+    // The defintions should be processed first
+    // otherwise they will be treated as unknown expressions.
     return readDefintion(tokenStream) || readExpression(tokenStream);
   }
+  // Reads the whole program from the given token stream.
+  // While iterating the token stream the parser tries
+  // to read whole forms and create AST nodes for each of them.
   function readProgram(tokenStream) {
+    // TODO read the import declaration
     var forms = [];
     var form = readCommandOrDefinition(tokenStream);
     while (form) {
@@ -796,8 +829,18 @@
     return forms;
   }
 
+  // The main function in the module.
+  // Creats an AST from programming code.
+  function parse(text, lang) {
+    lang = lang || 'en';
+    populateSyntax(lang, lang);
+    var tokenStream = new lexer.TokenStream(text, lang);
+    return readProgram(tokenStream);
+  }
+
+  // Exports the main function and the FormTypes tag values.
   return {
-    analyze: analyze,
+    parse: parse,
     FormTypes: FormTypes
   };
 }));

@@ -41,9 +41,8 @@
 
     'syntax-errors': {
       'if_expression_end_expected': 'Expected end of "if" expression.',
-      'invalid': 'Invalid conditional "if".',
       'if_expr_end_unexpected': 'Unexpected end of "if" expression.',
-      'proc_call_end_unexpected': 'Unexpected end of a procedure call. Expected a right parentheses.',
+      'proc_call_end_unexpected': 'Unexpected end of a procedure call. Expected a closing parentheses.',
       'invalid_proc_call': 'Invalid procedure call. Expected a right parentheses.',
       'lambda_expr_end_unexpected': 'Unexpected end of a lambda expression.',
       'lambda_formals_end_unexpected': 'Unexpected end of a lambda formals.',
@@ -137,13 +136,11 @@
       'exact_args_count_expected': 'Expected {0} arguments, but got {1}.',
       'min_args_count_expected': 'Expected at least {0} arguments, but got {1}.',
       'unknown_type': 'Unknown literal type "{0}".',
-      'wrong_args_count': 'Expected {0} arguments, but received {1}.',
-      'wrong_min_args_count': 'Expected at least {0} arguments, but received {1}.',
       'invalid_proc': 'Invalid procedure.',
       'undefined_variable': 'Undefined variable with name "{0}".',
       'argument_predicate_false': 'Expected argument on position {0} to satisfy predicate {1}.',
       'mutating_immutable_object': 'Cannot mutate an immutable object.',
-      'index_out_range': 'Index is out of range. The length of the vector is {0}.',
+      'vector_index_out_range': 'Index is out of range. The length of the vector is {0}.',
     },
   };
 
