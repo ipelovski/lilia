@@ -13,6 +13,8 @@ so it needs a revision for r7rs correctness.
     root.lexer = factory(root.langTable);
   }
 }(this, function (langTable) {
+  'use strict';
+  
   // The values used to tag tokens.
   // It seems there is no panalty for comparing
   // strings compared to numbers.
@@ -23,7 +25,7 @@ so it needs a revision for r7rs correctness.
     number: 'number',
     character: 'character',
     string: 'string',
-    leftParan: 'leftParan',
+    leftParen: 'leftParen',
     rightParen: 'rightParen',
     vectorParen: 'vectorParen',
     quote: 'quote',
@@ -114,7 +116,9 @@ so it needs a revision for r7rs correctness.
         }
       }
       // Checking for unknown errors.
-      if (!char) undefchar++;
+      if (!char) {
+        undefchar += 1;
+      }
       if (undefchar > 1) {
         throw new Error('Parse error');
       }
@@ -458,10 +462,10 @@ so it needs a revision for r7rs correctness.
     var token;
     do {
       token = this.tokenIterator.getNextToken();
+      this.cache.push(token);
       if (!token) {
         break;
-      }
-      this.cache.push(token);
+      }      
     }
     while (this.cache.length < idx);
     return token;

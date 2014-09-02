@@ -1,0 +1,25 @@
+{
+  "name": "lilia",
+  "version": "0.0.2",
+  "description": "A Scheme-like programming language running in the browser",
+  "main": "app.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ipelovski/lilia.git"
+  },
+  "keywords": [
+    "lilia",
+    "scheme",
+    "interpreter"
+  ],
+  "author": "Ivan Pelovski",
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "gitHead": "b02a6ad7620fe6f429de890ed033e5814a135bfa"
+}

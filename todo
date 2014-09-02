@@ -1,0 +1,18 @@
+commenting the code
+special forms
+data functions
+autocomplete and hints
+debugger
+continuations
+macros
+tutorial
+references
+samples
+turtle graphics
+html forms
+
+
+when there is a syntax error show the user code samples
+collect information about the effectiveness of the error messages
+show syntax errors while the user is typing. well this is a standard ide feature
+show autocomplete hints for syntax forms and functions similar to ms vs
