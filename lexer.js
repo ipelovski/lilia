@@ -283,7 +283,8 @@ so it needs a revision for r7rs correctness.
       return null;
     }
     // A constant holding valid escaped characters in strings like \n, \r, \t.
-    var validEscapedChars = new RegExp('["\\' + get('valid_escaped_chars') + ']');
+    var validEscapedChars = get('valid_escaped_chars');
+    var validEscapedCharCodes = [10, 13, 9]
     function guardString(char) {
       if (!char) {
         raiseError('invalid_string');
@@ -295,13 +296,17 @@ so it needs a revision for r7rs correctness.
       var char = getNextChar();
       guardString(char);
       while(char !== '"') {
-        buffer.push(char);
         if (char === '\\') {
+          // TODO add also escaped ", \, etc
           char = getNextChar();
           guardString(char);
-          if (!validEscapedChars.test(char)) {
+          var idx = validEscapedChars.indexOf(char);
+          if (idx === -1) {
             raiseError('invalid_escaped_char');
           }
+          buffer.push(String.fromCharCode(validEscapedCharCodes[idx]));
+        }
+        else {
           buffer.push(char);
         }
         char = getNextChar();

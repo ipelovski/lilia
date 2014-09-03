@@ -45,7 +45,6 @@ so it needs a revision for r7rs correctness.
     disjunction: 'disjunction',
     begin: 'begin',
     void: 'void',
-    derived: 'derived', // TODO
   };
   var OPTypes = {
     define: 'define',
@@ -171,7 +170,7 @@ so it needs a revision for r7rs correctness.
       case FormTypes.assignment:
         return [OPTypes.set];
       case FormTypes.literal:
-        // TODO now it uses the ast nodes
+        // TODO now it uses the ast nodes, should be changed to something simpler
         return [OPTypes.literal, form];
       case FormTypes.variable:
         return [OPTypes.variable, form.value];
@@ -520,7 +519,7 @@ so it needs a revision for r7rs correctness.
   function readCondClause(tokenStream) {
     var token = tokenStream.advance();
     if (!token) {
-      raiseError(tokenStream); // TODO
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
     }
     if (token.type === TokenTypes.leftParen) {
       token = tokenStream.peek();
@@ -533,25 +532,25 @@ so it needs a revision for r7rs correctness.
       else {
         test = readExpression(tokenStream);
         if (!test) {
-          raiseError(tokenStream); // TODO
+          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
         }
       }
       token = tokenStream.peek();
       if (isIdentifier(token) && token.value === syntax['=>']) {
         if (elseFound) {
-          raiseError(tokenStream); // TODO
+          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
         }
         tokenStream.advance();
         expression = readExpression(tokenStream);
         if (!expression) {
-          raiseError(tokenStream); // TODO
+          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
         }
         token = tokenStream.advance();
         if (token.type === TokenTypes.rightParen) {
           return createCondArrow(test, expression);
         }
         else {
-          raiseError(tokenStream); // TODO
+          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
         }
       }
       else {
@@ -571,7 +570,7 @@ so it needs a revision for r7rs correctness.
           }
         }
         else {
-          raiseError(tokenStream); // TODO
+          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
         }
       }
     }
@@ -581,7 +580,7 @@ so it needs a revision for r7rs correctness.
     var clauses = [];
     var clause = readCondClause(tokenStream);
     if (!clause) {
-      raiseError(); // TODO
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
     }
     var elseFound = false;
     while (clause) {

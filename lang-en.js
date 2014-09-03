@@ -25,6 +25,7 @@
       'let': 'let',
       'let*': 'let*',
       'letrec': 'letrec',
+      'letrec*': 'letrec*',
       'do': 'do',
       'delay': 'delay',
       'quasiquote': 'quasiquote',
@@ -88,6 +89,7 @@
       'duplicate_definitions': 'Found multiple definitions for variable "{0}".',
       'data_not_procedure': 'Simple data cannot be used as a procedure.',
       'cond_else_last': '"else" can be used only at the last part of a "cond" expression.',
+      'bad_syntax': 'Bad syntax.',
     },
 
     'tokens': {
@@ -152,6 +154,7 @@
       'argument_predicate_false': 'Expected argument on position {0} to satisfy predicate {1}.',
       'mutating_immutable_object': 'Cannot mutate an immutable object.',
       'vector_index_out_range': 'Index is out of range. The length of the vector is {0}.',
+      'maximum_stack_size_exceeded': 'Too much recursive calls with non-tail calls.',
     },
   };
 

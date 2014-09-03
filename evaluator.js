@@ -81,11 +81,24 @@ so it needs a revision for r7rs correctness.
       return env.clone();
     });
   }
+  var outputPort;
+  function OutputPort(fn) {
+    this.fn = fn;
+  }
+  OutputPort.prototype.emit = function emit(data) {
+    this.fn(data);
+  };
+  function setOutputPortHandler(fn) {
+    outputPort = new OutputPort(fn);
+  }  
   function Procedure(args, body, env) {
     this.args = args;
     this.body = body;
     this.env = env;
   }
+  Procedure.prototype.toString = function toString() {
+    return '#<procedure>';
+  };
   function PrimitiveProcedure(fn, name) {
     this.fn = fn;
     this.name = name || '';
@@ -114,6 +127,7 @@ so it needs a revision for r7rs correctness.
       value: args[0]
     };
   };
+  Continuation.prototype.toString = Procedure.prototype.toString;
   var procedureTypes = [Procedure, PrimitiveProcedure, ContinuationProcedure, Continuation];
   function isProcedure(arg) {
     return procedureTypes.some(function (type) {
@@ -135,6 +149,9 @@ so it needs a revision for r7rs correctness.
     this.immutable = !!immutable;
   }
   SchemeString.prototype.valueOf = function valueOf() {
+    return this.value;
+  };
+  SchemeString.prototype.toString = function toString() {
     return this.value;
   };
   function Vector(items, immutable) {
@@ -454,14 +471,16 @@ so it needs a revision for r7rs correctness.
     },
     'display': function (args, env) {
       guardArgsCountExact(env, args.length, 1);
-      // TODO
-      console.log(args[0].toString());
+      if (outputPort) {
+        outputPort.emit(args[0].toString());
+      }
       return Unspecified;
     },
     'newline': function (args, env) {
       guardArgsCountExact(env, args.length, 0);
-      // TODO
-      console.log('\n');
+      if (outputPort) {
+        outputPort.emit('\n');
+      }
       return Unspecified;
     },
   };
@@ -634,28 +653,6 @@ so it needs a revision for r7rs correctness.
       return -1;
     }
   }
-  function evalOPCall(op, env) {
-    var procedure = env.expressionStack.pop();
-    var argsCount = op[1];
-    var actualArgs = new Array(argsCount);
-    for (var i = argsCount - 1; i >= 0; i--) {
-      actualArgs[i] = env.expressionStack.pop();
-    }
-    var value;
-    if (procedure instanceof PrimitiveProcedure) {
-      value = procedure.execute(actualArgs, env);      
-    }
-    else { // instanceof Procedure
-      var formals = procedure.args;
-      var procEnv = new Environment(procedure.env);
-      applyArguments(formals, actualArgs, procEnv);
-      // TODO should not depend on JS recursion
-      // use something different from evalOPs
-      value = evalOPs(procedure.body, procEnv);
-    }
-    env.expressionStack.push(value);
-    return -1;
-  }
   function evalOPLambda(op, env) {
     var procedure = new Procedure(op[1], op[2], env);
     env.expressionStack.push(procedure);
@@ -695,8 +692,6 @@ so it needs a revision for r7rs correctness.
         return evalOPJumpIfFalseKeep(op, env);
       case OPTypes.jumpifnotfalsekeep:
         return evalOPJumpIfNotFalseKeep(op, env);
-      case OPTypes.call:
-        return evalOPCall(op, env);
       case OPTypes.lambda:
         return evalOPLambda(op, env);
       case OPTypes.discard:
@@ -728,7 +723,7 @@ so it needs a revision for r7rs correctness.
       if (op[0] === OPTypes.call
         || op[0] === OPTypes.tailcall) {
         if (envs.length >= maxEnvCount) {
-          throw new Error('ubre') // TODO
+          raiseRuntimeError(env, 'maximum_stack_size_exceeded');
         }
         var procedure = env.expressionStack.pop();
         var argsCount = op[1];
@@ -808,5 +803,6 @@ so it needs a revision for r7rs correctness.
   return {
     evaluate: evaluate,
     initEval: initEval,
+    setOutputPortHandler: setOutputPortHandler,
   };
 }));
