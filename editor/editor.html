@@ -6,17 +6,7 @@
   <title>Scheme Code Editor</title>
 	<link rel="stylesheet" type="text/css" href="lib/codemirror.css" />
 	<link rel="stylesheet" type="text/css" href="lib/monokai.css" />
-	<script type="text/javascript" src="lib/codemirror.js"></script>
-	<script type="text/javascript" src="lib/scheme.js"></script>
-	<script type="text/javascript" src="lib/closebrackets.js"></script>
-	<script type="text/javascript" src="lib/matchbrackets.js"></script>
-	<script type="text/javascript" src="../common.js"></script>
-  <script type="text/javascript" src="../lang-table.js"></script>
-  <script type="text/javascript" src="../lang-en.js"></script>
-  <script type="text/javascript" src="../lang-bg.js"></script>
-	<script type="text/javascript" src="../lexer.js"></script>
-	<script type="text/javascript" src="../parser.js"></script>
-	<script type="text/javascript" src="../evaluator.js"></script>
+	<link rel="stylesheet" type="text/css" href="lib/show-hint.css" />
 	<style type="text/css" media="screen">
 		body {
 			background-color: #272822;
@@ -39,28 +29,89 @@
 			text-transform: uppercase;
 			margin-bottom: 10px;
 		}
+		#button-clear {
+			background: linear-gradient(forestgreen, darkgreen);
+			border: none;
+			border-radius: 5px;
+			padding: 5px;
+			color: blanchedalmond;
+			font-weight: bold;
+		}
 		div.CodeMirror {
 			border-radius: 10px;
 			border: solid 2px coral;
 		}
-		#console-container {
-			/*text-align: center;*/
-		}
-		#console {
+		/*#console {
 			width: 800px;
 			height: 50px;
 			resize: none;
 			border-radius: 10px;
 			margin-top: 10px;
-			/*background-color: coral;*/
 			margin-top: 10px;
 			background: linear-gradient(coral, chocolate);
 			font-weight: 900;
 			font-size: 16px;
 			color: maroon;
 			border: none;
-		}
+		}*/
+
+		div#console {			
+			margin-top: 10px;
+	  }
+    div#console div.jquery-console-inner {
+    	width: 780px;
+    	height: 200px;
+    	background: linear-gradient(coral, chocolate);
+    	padding: 12px;
+      overflow: auto;
+      border-radius: 10px;
+      border: none;
+      font-weight: 700;
+			font-size: 14px;
+			font-family: monospace;
+    }
+    div#console div.jquery-console-prompt-box {
+    	color: maroon;    	
+    }
+    div#console div.jquery-console-focus span.jquery-console-cursor {
+      background: #272822;
+      color: #eee;
+      font-weight: bold;
+    }
+    div#console div.jquery-console-message {
+    	display: inline-block;
+    }
+    div#console div.jquery-console-message-break {
+    	display: block;
+    }
+    div#console div.jquery-console-message-error {
+      color:#ef0505;
+      /*font-family:sans-serif;*/
+      padding:0.1em;
+    }
+    div#console div.jquery-console-message-success {
+    	color:#187718;
+      padding:0.1em;
+    }
+    div#console span.jquery-console-prompt-label {
+    	font-weight:bold;
+    }
 	</style>
+	<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.1.min.js"></script>
+  <script type="text/javascript" src="lib/jquery.console.js"></script>
+	<script type="text/javascript" src="lib/codemirror.js"></script>
+	<script type="text/javascript" src="lib/scheme.js"></script>
+	<script type="text/javascript" src="lib/closebrackets.js"></script>
+	<script type="text/javascript" src="lib/matchbrackets.js"></script>
+	<script type="text/javascript" src="lib/show-hint.js"></script>
+	<script type="text/javascript" src="lib/anyword-hint.js"></script>
+	<script type="text/javascript" src="../common.js"></script>
+  <script type="text/javascript" src="../lang-table.js"></script>
+  <script type="text/javascript" src="../lang-en.js"></script>
+  <script type="text/javascript" src="../lang-bg.js"></script>
+	<script type="text/javascript" src="../lexer.js"></script>
+	<script type="text/javascript" src="../parser.js"></script>
+	<script type="text/javascript" src="../evaluator.js"></script>
 </head>
 <body>
 	<div>
@@ -77,54 +128,238 @@
 	<textarea id="editor">
 	</textarea>
 	<div id="cursor-position"></div>
-	<div id="console-container">
-		<textarea id="console"></textarea>
-	</div>
+	<div id="console"></div>
+	<input id="button-clear" type="button" value="Clear" />
 	<script type="text/javascript">
+		var keywords = [];
+		function setKeywords(lang) {
+			var langData = window['lang-' + lang];
+			keywords = Object.keys(langData.syntax)
+				.map(function (key) {
+					return langData.syntax[key];
+				})
+				.concat(Object.keys(langData.procedures)
+					.map(function (key) {
+						return langData.procedures[key];
+					}));
+		}
+		var symbolRegex = '[\\wа-яА-Я_\\-\\/]+';
+		// console initialization
+		var consoleSuccessClassName = 'jquery-console-message-success';
+		var consoleErrorClassName = 'jquery-console-message-error';
+		var customConsoleElement = jQuery('#console');
+		var consoleRegex = new RegExp(symbolRegex + '$', 'g');
+		var customConsole = customConsoleElement.console({
+			promptLabel: '> ',
+			commandValidate: function(line) {
+				//return line !== '';
+				return true;
+			},
+			commandHandle: function (line) {
+				var result;
+				try {
+					result = evaluate(line);
+					if (result !== null || result !== undefined) {
+						result = result.toString();
+					}
+					if (result === '') { // Unspecified.toString()
+						return true;
+					}
+					return [{
+						msg: result,
+						className: consoleSuccessClassName
+					}];
+				}
+				catch (err) {
+					result = err.toString();		
+					return [{
+						msg: result,
+						className: consoleErrorClassName
+					}];			
+				}
+			},
+			autofocus: false,
+			animateScroll: true,
+			promptHistory: true,
+			fadeOnReset: false,
+			welcomeMessage: 'Enter some Scheme expressions to evaluate. You can use Tab for autocomplete.',
+			cols: 90,
+			completeHandle: function (input) {
+				var match = input.match(consoleRegex);
+				if (!match) {
+					return [];
+				}
+				var word = match[0];				
+				var matched = keywords.filter(function (keyword) {
+					return keyword.indexOf(word) === 0;
+				});
+				if (matched.length === 1) {
+					return [matched[0].substr(word.length)];
+				}
+				else {
+					return matched;
+				}
+			},
+		});
+		function innerConsoleLog(text, cssClass) {
+			//document.getElementById('console').value = '> ' + text;
+
+			// var je = jQuery.Event('keydown');
+			// je.keyCode = 13;
+			// customConsole.typer.trigger(je);
+			if (text) {
+				customConsole.commandResult(text, cssClass);
+			}
+		}
+		function consoleLog(text) {
+			innerConsoleLog(text, consoleSuccessClassName);
+		}
+		function consoleError(text) {
+			innerConsoleLog(text, consoleErrorClassName);
+		}
+
+		var editorRegex = new RegExp(symbolRegex);
 		function showCursorPosition() {
 			var pos = codeEditor.getCursor();
 			document.getElementById('cursor-position').innerText = 'Line ' + (pos.line + 1) + ', Column ' + (pos.ch + 1);
 		}
+		CodeMirror.keyMap.extra = {
+			Tab: function(cm) {
+				var pos = cm.getCursor();
+				var line = cm.getLine(pos.line);
+				var ch = line[pos.ch - 1];
+				if (ch !== undefined && editorRegex.test(ch)) {
+					CodeMirror.showHint(cm);
+					var newPos = cm.getCursor();
+					if (pos.ch === newPos.ch // nothing is inserted
+						&& cm.state.completionActive === null) { // no hint widget is displayed
+						cm.execCommand('insertTab');
+					}
+				}
+				else {
+					cm.execCommand('insertTab');
+				}
+			},
+			fallthrough: 'default'
+		};
 		var codeEditor = CodeMirror.fromTextArea(document.getElementById('editor'), {
 			theme: 'monokai',
 			indentUnit: 4,
+			keyMap: 'extra',
 			lineNumbers: true,
 			matchBrackets: true,
 			autoCloseBrackets: true,
 			autofocus: true,
+			mode: {
+				name: 'scheme',
+				keywords: (function () {
+					var keywords = [];
+					['en', 'bg'].forEach(function (lang) {
+						var langData = window['lang-' + lang];
+						keywords = keywords
+							.concat(Object.keys(langData.syntax)
+								.map(function (key) {
+									return langData.syntax[key];
+								}))
+							.concat(Object.keys(langData.procedures)
+								.map(function (key) {
+									return langData.procedures[key];
+								}));
+					});
+					return keywords;
+				}()),
+				indentKeys: (function () {
+					var keys = [];
+					['en', 'bg'].forEach(function (lang) {
+						var langData = window['lang-' + lang];
+						keys = keys.concat([
+							langData.syntax['define'],
+							langData.syntax['let'],
+							langData.syntax['let*'],
+							langData.syntax['letrec'],
+							langData.syntax['letrec*'],
+							langData.syntax['lambda']
+						]);
+					});
+					return keys;
+				}()),
+			},
+			extraKeys: { 'Ctrl-Space': 'autocomplete' },			
 		});
 		codeEditor.setSize(800, 400);
 		codeEditor.on('cursorActivity', showCursorPosition);
-		codeEditor.setValue(';start here\n');
+		codeEditor.setValue(';start here, use Ctrl + Space or Tab for autocomplete\n');
 		codeEditor.setCursor(1, 0);
+
+		CodeMirror.hint.scheme = function(cm) {
+		  var inner = CodeMirror.hint.anyword(cm);
+	  	var list = inner.list;
+		  var token = cm.getTokenAt(cm.getCursor());
+		  if (token && (token.type === 'builtin'
+		  	|| token.type === 'variable' || token.type === 'string')) {
+		  	var word = token.string;
+		  	keywords.forEach(function (keyword) {
+		  		if (keyword.indexOf(word) === 0 && list.indexOf(keyword) === -1) {
+		  			list.push(keyword);
+		  		}
+		  	});
+		  }
+		  else {
+		  	list.push.apply(list, keywords);
+		  }
+		  return inner;
+		};
 		showCursorPosition();
+
+		evaluator.setOutputPortHandler(function (data) {
+			var lines = data.split('\n');
+			var line;
+			for (var i = 0, l = lines.length - 1; i < l; i++) {
+				line = lines[i];
+				customConsole.message(line);
+				customConsole.message('', 'jquery-console-message-break');
+			}
+			line = lines[lines.length - 1];
+			// '\n'.split('\n') => ['', ''], so we don't need to output the last empty string
+			if (line !== '') {
+				customConsole.message(line);
+			}
+		});
 		var evaluate = evaluator.initEval('en');
-		function consolelog(text) {
-			document.getElementById('console').value = '> ' + text;
-		}
+		setKeywords('en');
+		
 		function runScheme() {
 			var input = codeEditor.getValue();
 			var result;
+			customConsole.promptText('Evaluating...');
 			try {
 				result = evaluate(input);
+				if (result !== null || result !== undefined) {
+					result = result.toString();
+				}
+				consoleLog(result);
 			}
 			catch (err) {
 				result = err.toString();
 				if (typeof err.line === 'number') {
 					codeEditor.setCursor(err.line - 1, err.column - 1);
 				}
+				consoleError(result);
 			}
-			consolelog(result);
 			codeEditor.focus();
 		}
 		document.getElementById('button-run').addEventListener('click', runScheme);
 		document.getElementById('en-en-lang').addEventListener('click', function() {
 			evaluate = evaluator.initEval('en');
+			setKeywords('en');
 		});
 		document.getElementById('bg-bg-lang').addEventListener('click', function() {
 			evaluate = evaluator.initEval('bg');
+			setKeywords('bg');
 		});
-		consolelog('');
+		document.getElementById('button-clear').addEventListener('click', function () {
+			customConsole.reset();
+		});
 	</script>
 </body>
 </html>

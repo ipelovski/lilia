@@ -14,7 +14,10 @@ so it needs a revision for r7rs correctness.
     root.evaluator = factory(root.lexer, root.parser, root.langTable);
   }
 }(this, function (lexer, parser, langTable) {
+  'use strict';
+  
   var FormTypes = parser.FormTypes;
+  var OPTypes = parser.OPTypes;
   var TokenTypes = lexer.TokenTypes;
   var langName = '@-1Ang-@';
 
@@ -22,6 +25,9 @@ so it needs a revision for r7rs correctness.
     this.parent = parent || null;
     this.varNames = [];
     this.varValues = [];
+    this.expressionStack = [];
+    this.opIndex = 0;
+    this.ops = null;
   }
   Environment.prototype.addVar = function addVar(name, value) {
     var idx = this.varNames.indexOf(name);
@@ -61,21 +67,81 @@ so it needs a revision for r7rs correctness.
       return this.varValues[idx];
     }
   };
+  Environment.prototype.clone = function clone() {
+    var env = new Environment(this.parent);
+    env.varNames = this.varNames;
+    env.varValues = this.varValues;
+    env.expressionStack = this.expressionStack.slice();
+    env.opIndex = this.opIndex;
+    env.ops = this.ops;
+    return env;
+  };
+  function cloneEnvs(envs) {
+    return envs.map(function (env) {
+      return env.clone();
+    });
+  }
+  var outputPort;
+  function OutputPort(fn) {
+    this.fn = fn;
+  }
+  OutputPort.prototype.emit = function emit(data) {
+    this.fn(data);
+  };
+  function setOutputPortHandler(fn) {
+    outputPort = new OutputPort(fn);
+  }  
   function Procedure(args, body, env) {
     this.args = args;
     this.body = body;
     this.env = env;
   }
-  function PrimitiveProcedure(fn) {
+  Procedure.prototype.toString = function toString() {
+    return '#<procedure>';
+  };
+  function PrimitiveProcedure(fn, name) {
     this.fn = fn;
+    this.name = name || '';
   }
   PrimitiveProcedure.prototype.execute = function execute(args, env) {
     return this.fn(args, env);
   };
+  PrimitiveProcedure.prototype.toString = function toString() {
+    return '#<procedure ' + this.name + '>';
+  };
+  function ContinuationProcedure(fn, name) {
+    this.fn = fn;
+    this.name = name || '';
+  }
+  ContinuationProcedure.prototype.execute = function execute(args, env, envs) {
+    return this.fn(args, env, envs);
+  };
+  ContinuationProcedure.prototype.toString = PrimitiveProcedure.prototype.toString;
+  function Continuation(envs) {
+    this.envs = envs;
+  }
+  Continuation.prototype.execute = function execute(args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    return {
+      envs: cloneEnvs(this.envs),
+      value: args[0]
+    };
+  };
+  Continuation.prototype.toString = Procedure.prototype.toString;
+  var procedureTypes = [Procedure, PrimitiveProcedure, ContinuationProcedure, Continuation];
+  function isProcedure(arg) {
+    return procedureTypes.some(function (type) {
+      return arg instanceof type;
+    });
+  }
+
   function Symbol(value) {
     this.value = value;
   }
   Symbol.prototype.valueOf = function valueOf() {
+    return this.value;
+  };
+  Symbol.prototype.toString = function valueOf() {
     return this.value;
   };
   function SchemeString(value, immutable) {
@@ -83,6 +149,9 @@ so it needs a revision for r7rs correctness.
     this.immutable = !!immutable;
   }
   SchemeString.prototype.valueOf = function valueOf() {
+    return this.value;
+  };
+  SchemeString.prototype.toString = function toString() {
     return this.value;
   };
   function Vector(items, immutable) {
@@ -109,6 +178,7 @@ so it needs a revision for r7rs correctness.
   Pair.prototype.toString = function toString() {
     var list = this;
     var str = '(';
+    var cdr;
     while (list instanceof Pair) {
       str += list.car.toString();
       cdr = list.cdr;
@@ -134,7 +204,7 @@ so it needs a revision for r7rs correctness.
   var Unspecified = Object.create(null);
   Unspecified.toString = function toString() {
     return '';
-  }
+  };
   function createList(args, env, immutable) {
     var pair = EmptyList;
     for (var i = args.length - 1; i >= 0; i--) {
@@ -143,20 +213,10 @@ so it needs a revision for r7rs correctness.
     return pair;
   }
   function isProperList(list) {
-    var cdr;
     while (list instanceof Pair) {
-      cdr = list.cdr;
-      if (cdr instanceof Pair) {
-        list = cdr;
-      }
-      else if (cdr === EmptyList) {
-        return true;
-      }
-      else {
-        return false;
-      }
+      list = list.cdr;      
     }
-    return false;
+    return list === EmptyList;
   }
   function createVector(args, env, immutable) {
     return new Vector(args, immutable);
@@ -257,7 +317,7 @@ so it needs a revision for r7rs correctness.
     '=': function (args, env) {
       guardArgsCountMin(env, args.length, 2);
       guardNumbers(env, args);
-      for (i = 0, l = args.length - 1; i < l; i++) {
+      for (var i = 0, l = args.length - 1; i < l; i++) {
         if (args[i] !== args[i + 1]) {
           return false;
         }
@@ -267,7 +327,7 @@ so it needs a revision for r7rs correctness.
     '<': function (args, env) {
       guardArgsCountMin(env, args.length, 2);
       guardNumbers(env, args);
-      for (i = 0, l = args.length - 1; i < l; i++) {
+      for (var i = 0, l = args.length - 1; i < l; i++) {
         if (args[i] >= args[i + 1]) {
           return false;
         }
@@ -277,7 +337,7 @@ so it needs a revision for r7rs correctness.
     '>': function (args, env) {
       guardArgsCountMin(env, args.length, 2);
       guardNumbers(env, args);
-      for (i = 0, l = args.length - 1; i < l; i++) {
+      for (var i = 0, l = args.length - 1; i < l; i++) {
         if (args[i] <= args[i + 1]) {
           return false;
         }
@@ -302,24 +362,24 @@ so it needs a revision for r7rs correctness.
     },
     'car': function (args, env) {
       guardArgsCountExact(env, args.length, 1);
-      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?')
+      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?');
       return args[0].car;
     },
     'cdr': function (args, env) {
       guardArgsCountExact(env, args.length, 1);
-      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?')
+      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?');
       return args[0].cdr;
     },
     'set-car!': function (args, env) {
       guardArgsCountExact(env, args.length, 2);
-      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?')
+      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?');
       guardImmutable(env, args[0]);
       args[0].car = args[1];
       return Unspecified;
     },
     'set-cdr!': function (args, env) {
       guardArgsCountExact(env, args.length, 2);
-      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?')
+      guardArgPredicate(env, args[0], primitiveFunctions['pair?'], 0, 'procedures', 'pair?');
       guardImmutable(env, args[0]);
       args[0].cdr = args[1];
       return Unspecified;
@@ -333,6 +393,44 @@ so it needs a revision for r7rs correctness.
       return isProperList(args[0]);
     },
     'list': createList,
+    'append': function (args, env) {
+      var argsCount = args.length;
+      if (argsCount === 0) {
+        return EmptyList;
+      }
+      if (argsCount === 1) {
+        return args[0];
+      }
+      var i, l;
+      for (i = 0, l = argsCount - 1; i < l; i++) {
+        guardArgPredicate(env, args[i], primitiveFunctions['list?'], i, 'procedures', 'list?');
+      }
+      var last = args[argsCount - 1];
+      var first, pair, nextPair, list;
+      for (i = 0, l = argsCount - 1; i < l; i++) {
+        list = args[i];
+        if (list === EmptyList) {
+          continue;
+        }        
+        nextPair = new Pair(list.car, EmptyList);
+        if (pair) {
+          pair.cdr = nextPair;
+        }
+        pair = nextPair;
+        if (!first) {
+          first = pair;
+        }
+        while (list.cdr !== EmptyList) {
+          list = list.cdr;
+          pair.cdr = new Pair(list.car, EmptyList);
+          pair = pair.cdr;
+        }
+      }
+      if (pair) {
+        pair.cdr = last;
+      }
+      return first || last;
+    },
     'vector': createVector,
     'vector?': function (args, env) {
       guardArgsCountExact(env, args.length, 1);
@@ -366,78 +464,77 @@ so it needs a revision for r7rs correctness.
       }
       arr[k] = args[2];
       return Unspecified;
-    }
+    },
+    'procedure?': function (args, env) {
+      guardArgsCountExact(env, args.length, 1);
+      return isProcedure(args[0]);
+    },
+    'display': function (args, env) {
+      guardArgsCountExact(env, args.length, 1);
+      if (outputPort) {
+        outputPort.emit(args[0].toString());
+      }
+      return Unspecified;
+    },
+    'newline': function (args, env) {
+      guardArgsCountExact(env, args.length, 0);
+      if (outputPort) {
+        outputPort.emit('\n');
+      }
+      return Unspecified;
+    },
   };
   function addPrimitivesAndLang(env, lang) {
     env.addVar(langName, lang);
     for (var name in primitiveFunctions) {
       var translatedName = langTable.get(lang, 'procedures', name);
-      env.addVar(translatedName, new PrimitiveProcedure(primitiveFunctions[name]));
+      env.addVar(translatedName,
+        new PrimitiveProcedure(primitiveFunctions[name], translatedName));
+    }
+    addContinuationProcedures(env, lang);
+  }
+  function callcc(args, env, envs) {
+    guardArgsCountExact(env, args.length, 1);
+    guardArgPredicate(env, args[0], primitiveFunctions['procedure?'], 0, 'procedures', 'procedure?');
+    var clonedEnvs = cloneEnvs(envs);
+    return new Continuation(clonedEnvs);
+  }
+  var continuationProcedures = {
+    'call-with-current-continuation': callcc,
+    'call/cc': callcc,
+  };
+  function addContinuationProcedures(env, lang) {
+    for (var name in continuationProcedures) {
+      var translatedName = langTable.get(lang, 'procedures', name);
+      env.addVar(translatedName,
+        new ContinuationProcedure(continuationProcedures[name], translatedName));
+    }
+  }
+  
+  function applyArguments(formals, actualArgs, procEnv) {
+    var i;
+    if (!Array.isArray(formals)) {
+      procEnv.addVar(formals, createList(actualArgs));
+    }
+    else if (formals[formals.length - 2] === '.') {
+      if (formals.length -1 > actualArgs.length) {
+        raiseRuntimeError(procEnv, 'min_args_count_expected', [formals.length, actualArgs.length]);
+      }
+      for (i = 0; i < formals.length - 2; i++) {
+        procEnv.addVar(formals[i], actualArgs[i]);
+      }
+      procEnv.addVar(formals[formals.length - 1], createList(actualArgs.slice(formals.length - 2)));
+    }
+    else {
+      if (formals.length !== actualArgs.length) {
+        raiseRuntimeError(procEnv, 'exact_args_count_expected', [formals.length, actualArgs.length]);
+      }
+      for (i = 0; i < formals.length; i++) {
+        procEnv.addVar(formals[i], actualArgs[i]);
+      }
     }
   }
 
-  function evalForms(forms, env) {
-    var result, procedureCall;
-    for (var i = 0; i < forms.length; i++) {
-      result = evalFormFully(forms[i], env);
-    }
-    return result;
-  }
-  function evalForm(form, env) {
-    if (form.type === FormTypes.definition) {
-      return evalDefintion(form, env);
-    }
-    if (form.type === FormTypes.assignment) {
-      return evalAssignment(form, env);
-    }
-    if (form.type === FormTypes.variable) {
-      return evalVariable(form, env);
-    }
-    if (form.type === FormTypes.literal) {
-      return evalLiteral(form, env);
-    }
-    if (form.type === FormTypes.lambda) {
-      return evalLambda(form, env);
-    }
-    if (form.type === FormTypes.conditional) {
-      return evalConditional(form, env);
-    }
-    if (form.type === FormTypes.conjunction) {
-      return evalConjunction(form, env);
-    }
-    if (form.type === FormTypes.disjunction) {
-      return evalDisjunction(form, env);
-    }
-    if (form.type === FormTypes.begin) {
-      return evalBegin(form, env);
-    }
-    if (form.type === FormTypes.procedureCall) {
-      return applyProcedure(form, env);
-    }
-  }
-  function evalFormFully(form, env) {
-    var value = evalForm(form, env);
-    while (value.procedureCall) {
-      procedureCall = {
-        type: FormTypes.procedureCall,
-        procedure: value.procedureCall.procedure,
-        arguments: value.procedureCall.arguments
-      };
-      value = evalForm(procedureCall, value.env);
-    }
-    return value;
-  }
-  function evalDefintion(definition, env) {
-    env.addVar(definition.identifier, evalForm(definition.value, env));
-    return Unspecified;
-  }
-  function evalAssignment(assignment, env) {
-    env.setVar(assignment.identifier, evalForm(assignment.value, env));
-    return Unspecified;
-  }
-  function evalVariable(variable, env) {
-    return env.getVar(variable.identifier);
-  }
   function evalListLiteral(listItems, env) {
     if (listItems.length === 0) {
       return EmptyList;
@@ -494,125 +591,218 @@ so it needs a revision for r7rs correctness.
         raiseRuntimeError(env, 'unknown_type', [type]);
     }
   }
-  function evalLambda(form, env) {
-    return new Procedure(form.formals, form.body, env);
+
+  function peek(arr) {
+    return arr[arr.length - 1];
   }
-  function evalConditional(form, env) {
-    var test = evalForm(form.test, env);
-    if (test !== false) {
-      return evalForm(form.consequent, env);
+  function evalOPDefine(op, env) {
+    var value = env.expressionStack.pop();
+    var identifier = env.expressionStack.pop();
+    env.addVar(identifier.value, value);
+    env.expressionStack.push(Unspecified);
+    return -1;
+  }
+  function evalOPInternalDefine(op, env) {
+    var identifiers = op[1];
+    for (var i = 0; i < identifiers.length; i++) {
+      env.addVar(identifiers[i], Unspecified);
+    }
+    return -1;
+  }
+  function evalOPSet(op, env) {
+    var value = env.expressionStack.pop();
+    var identifier = env.expressionStack.pop();
+    env.setVar(identifier.value, value);
+    env.expressionStack.push(Unspecified);
+    return -1;
+  }
+  function evalOPVariable(op, env) {
+    var value = env.getVar(op[1]);
+    env.expressionStack.push(value);
+    return -1;
+  }
+  function evalOPLiteral(op, env) {
+    var value = evalLiteral(op[1], env);
+    env.expressionStack.push(value);
+    return -1;
+  }
+  function evalOPJumpIfFalse(op, env) {
+    var value = env.expressionStack.pop();
+    if (value === false) {
+      return op[1];
     }
     else {
-      return evalForm(form.alternate, env);
+      return -1;
     }
   }
-  function evalConjunction(form, env) {
-    var value = true;
-    var tests = form.tests;
-    for (var i = 0; i < tests.length; i++) {
-      value = evalForm(tests[i], env);
-      if (value === false) {
-        break;
-      }
-    }
-    return value;
-  }
-  function evalDisjunction(form, env) {
-    var value = false;
-    var tests = form.tests;
-    for (var i = 0; i < tests.length; i++) {
-      value = evalForm(tests[i], env);
-      if (value !== false) {
-        break;
-      }
-    }
-    return value;
-  }
-  function evalBegin(form, env) {
-    return evalBodyForms(form.forms, env);
-  }
-  function applyProcedure(form, env) {
-    if (form.tail) {
-      return {
-        procedureCall: form,
-        env: env
-      };
+  function evalOPJumpIfFalseKeep(op, env) {
+    var value = peek(env.expressionStack);
+    if (value === false) {
+      return op[1];
     }
     else {
-      return evalProcedure(form, env);
+      return -1;
     }
   }
-  function evalBodyForms(forms, env) {
-    var result, procedureCall;
-    for (var i = 0; i < forms.length; i++) {
-      result = evalForm(forms[i], env);    
+  function evalOPJumpIfNotFalseKeep(op, env) {
+    var value = peek(env.expressionStack);
+    if (value !== false) {
+      return op[1];
     }
-    return result;
+    else {
+      return -1;
+    }
   }
-  function evalProcedure(form, env) {
-    var procedure = evalFormFully(form.procedure, env);
-    if (procedure instanceof Procedure ||
-        procedure instanceof PrimitiveProcedure) {
-      var actualArgs = [];
-      var procArgs = form.arguments;
-      for (var i = 0; i < procArgs.length; i++) {
-        actualArgs.push(evalFormFully(procArgs[i], env));
+  function evalOPLambda(op, env) {
+    var procedure = new Procedure(op[1], op[2], env);
+    env.expressionStack.push(procedure);
+    return -1;
+  }
+  function evalOPDiscard(op, env) {
+    var value = env.expressionStack.pop();
+    var count = op[1];
+    while (count > 0) {
+      env.expressionStack.pop();
+      count --;
+    }
+    env.expressionStack.push(value);
+    return -1;
+  }
+  function evalOPVoid(op, env) {
+    env.expressionStack.push(Unspecified);
+    return -1;
+  }
+  function evalOP(op, env) {
+    switch (op[0]) {
+      case OPTypes.define:
+        return evalOPDefine(op, env);
+      case OPTypes.internaldefine:
+        return evalOPInternalDefine(op, env);
+      case OPTypes.set:
+        return evalOPSet(op, env);
+      case OPTypes.literal:
+        return evalOPLiteral(op, env);
+      case OPTypes.variable:
+        return evalOPVariable(op, env);
+      case OPTypes.jump:
+        return op[1];
+      case OPTypes.jumpiffalse:
+        return evalOPJumpIfFalse(op, env);
+      case OPTypes.jumpiffalsekeep:
+        return evalOPJumpIfFalseKeep(op, env);
+      case OPTypes.jumpifnotfalsekeep:
+        return evalOPJumpIfNotFalseKeep(op, env);
+      case OPTypes.lambda:
+        return evalOPLambda(op, env);
+      case OPTypes.discard:
+        return evalOPDiscard(op, env);
+      case OPTypes.void:
+        return evalOPVoid(op, env);
+    }
+  }
+  function evalOPs(ops, env) {
+    function applyProcedure(procedure, actualArgs) {
+      var formals = procedure.args;
+      env = new Environment(procedure.env);
+      if (op[0] === OPTypes.tailcall) {
+        envs.pop();
       }
-      if (procedure instanceof Procedure) {
-        var formals = procedure.args;
-        var procEnv = new Environment(procedure.env);
-        if (!Array.isArray(formals)) {
-          procEnv.addVar(formals, createList(actualArgs));
+      envs.push(env);
+      applyArguments(formals, actualArgs, env);
+      ops = env.ops = procedure.body;
+      idx = 0;
+    }
+    var idx, op, value;
+    var i = 0;
+    var envs = [env];
+    var maxEnvCount = 1000;
+    env.ops = ops; // TODO move it
+    main:
+    while (true) {
+      op = ops[i];
+      if (op[0] === OPTypes.call
+        || op[0] === OPTypes.tailcall) {
+        if (envs.length >= maxEnvCount) {
+          raiseRuntimeError(env, 'maximum_stack_size_exceeded');
         }
-        else if (formals[formals.length - 2] === '.') {
-          if (formals.length -1 > actualArgs.length) {
-            raiseRuntimeError(env, 'min_args_count_expected', [formals.length, actualArgs.length]);
-          }
-          for (i = 0; i < formals.length - 2; i++) {
-            procEnv.addVar(formals[i], actualArgs[i]);
-          }
-          procEnv.addVar(formals[formals.length - 1], createList(actualArgs.slice(formals.length - 2)));
+        var procedure = env.expressionStack.pop();
+        var argsCount = op[1];
+        var actualArgs = new Array(argsCount);
+        for (var a = argsCount - 1; a >= 0; a--) {
+          actualArgs[a] = env.expressionStack.pop();
         }
-        else {
-          if (formals.length !== actualArgs.length) {
-            raiseRuntimeError(env, 'exact_args_count_expected', [formals.length, actualArgs.length]);
-          }
-          for (i = 0; i < formals.length; i++) {
-            procEnv.addVar(formals[i], actualArgs[i]);
-          }
+        if (procedure instanceof PrimitiveProcedure) {
+          value = procedure.execute(actualArgs, env);
+          env.expressionStack.push(value);
+          idx = -1;
         }
-        return evalBodyForms(procedure.body, procEnv);
+        else if (procedure instanceof Procedure) {
+          applyProcedure(procedure, actualArgs);
+        }
+        else if (procedure instanceof ContinuationProcedure) {
+          value = procedure.execute(actualArgs, env, envs);
+          // TODO the passed lambda should accept only one argument
+          procedure = actualArgs[0];
+          applyProcedure(procedure, [value]);
+        }
+        else if (procedure instanceof Continuation) {
+          value = procedure.execute(actualArgs, env);
+          envs = value.envs;
+          env = peek(envs);
+          env.expressionStack.push(value.value);
+          ops = env.ops;
+          idx = env.opIndex + 1;
+        }
       }
       else {
-        return procedure.execute(actualArgs, env);
+        idx = evalOP(op, env);
       }
+      if (idx !== -1) {
+        i = idx;
+      }
+      else {
+        while (true) {
+          i += 1;
+          if (i === ops.length) { // the procedure ends
+            if (envs.length === 1) { // all code is evaluated, including the global - the first environment
+              break main;
+            }
+            value = env.expressionStack.pop(); // return value of procedure
+            envs.pop();
+            env = peek(envs);
+            ops = env.ops;
+            i = env.opIndex;
+            env.expressionStack.push(value);
+          }
+          else {
+            break;
+          }
+        }
+      }
+      env.opIndex = i;
     }
-    else {
-      raiseRuntimeError(env, 'invalid_proc');
-    }
+    return env.expressionStack.pop();
   }
 
-  function evalProgram(forms, lang) {
-    var env = new Environment();
-    addPrimitivesAndLang(env, lang);
-    return evalForms(forms, env);
-  }
   function evaluate(text, lang) {
     lang = lang || 'en';
-    var forms = parser.parse(text, lang);
-    return evalProgram(forms, lang);
+    var program = parser.parse(text, lang);
+    var env = new Environment();
+    addPrimitivesAndLang(env, lang);
+    return evalOPs(program, env);
   }
   function initEval(lang) {
     lang = lang || 'en';
     var env = new Environment();
     addPrimitivesAndLang(env, lang);
     return function evalFragment(text) {
-      var forms = parser.parse(text, lang);
-      return evalForms(forms, env);
+      var fragment = parser.parse(text, lang);
+      return evalOPs(fragment, env);
     };
   }
   return {
     evaluate: evaluate,
-    initEval: initEval
+    initEval: initEval,
+    setOutputPortHandler: setOutputPortHandler,
   };
 }));

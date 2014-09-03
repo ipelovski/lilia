@@ -25,6 +25,7 @@
       'let': 'let',
       'let*': 'let*',
       'letrec': 'letrec',
+      'letrec*': 'letrec*',
       'do': 'do',
       'delay': 'delay',
       'quasiquote': 'quasiquote',
@@ -49,7 +50,6 @@
       'lambda_expr_variable_expected': 'Expected a variable after a dot in lambda formals.',
       'expected_lambda_formals_end': 'Expected a right parentheses to end the lambda formals.',
       'invalid_lambda_formals': 'Expected a list of formals or a single variable.',
-      'lambda_formals_variable_expected': 'Expected at least one variable in lambda formals.',
       'no_lambda_body_exprs': 'The lambda body needs at least one expression.',
       'lambda_body_end_unexpected': 'Unexpected end of a lambda body.',
       'invalid_lambda_body_end': 'The lambda body should be closed with a right parentheses.',
@@ -69,7 +69,6 @@
       'let_body_end_unexpected': 'Unexpected end of a let body.',
       'no_let_body_exprs': 'The let body needs at least one expression.',
       'invalid_let_body_end': 'The let body should be closed with a right parentheses.',
-      'no_begin_exprs': 'The begin expression needs at least one subexpression.',
       'no_definition_exprs': 'The definition needs at least one subexpression.',
       'definition_formals_end_unexpected': 'Unexpected end of a defintion formals.',
       'definition_expr_variable_expected': 'Expected a variable after a dot in definition formals.',
@@ -83,6 +82,14 @@
       'vector_end_unexpected': 'Unexpected end of a vector.',
       'expected_vector_end': 'Expected a right parentheses to end the vector.',
       'invalid_datum': 'Invalid datum representation.',
+      'expr_expected_definition_found': 'Expected an expression but found a definition. ' +
+        'Definitions should be placed at the beginning of the lambda body.',
+      'definition_expected_expr_found': 'Expected a definition but found an expression. ' +
+        'Definitions should be placed at the beginning of the lambda body.',
+      'duplicate_definitions': 'Found multiple definitions for variable "{0}".',
+      'data_not_procedure': 'Simple data cannot be used as a procedure.',
+      'cond_else_last': '"else" can be used only at the last part of a "cond" expression.',
+      'bad_syntax': 'Bad syntax.',
     },
 
     'tokens': {
@@ -129,6 +136,12 @@
       'vector-length': 'vector-length',
       'vector-ref': 'vector-ref',
       'vector-set!': 'vector-set!',
+      'procedure?': 'procedure?',
+      'call-with-current-continuation': 'call-with-current-continuation',
+      'call/cc': 'call/cc',
+      'display': 'display',
+      'newline': 'newline',
+      'append': 'append',
     },
 
     'runtime-errors': {
@@ -141,6 +154,7 @@
       'argument_predicate_false': 'Expected argument on position {0} to satisfy predicate {1}.',
       'mutating_immutable_object': 'Cannot mutate an immutable object.',
       'vector_index_out_range': 'Index is out of range. The length of the vector is {0}.',
+      'maximum_stack_size_exceeded': 'Too much recursive calls with non-tail calls.',
     },
   };
 
