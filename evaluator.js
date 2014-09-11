@@ -259,6 +259,41 @@ so it needs a revision for r7rs correctness.
       raiseRuntimeError(env, 'mutating_immutable_object');
     }
   }
+  function isEquivalent(args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    function haveConstructor(args, constructor) {
+      return args[0] instanceof constructor && args[1] instanceof constructor;
+    }
+    var obj1 = args[0];
+    var obj2 = args[1];
+    if (typeof obj1 === 'boolean' && typeof obj2 === 'boolean') {
+      return obj1 === obj2;
+    }
+    if (typeof obj1 === 'number' && typeof obj2 === 'number') {
+      return obj1 === obj2;
+    }
+    if (typeof obj1 === 'string' && typeof obj2 === 'string') {
+      return obj1 === obj2; // chars
+    }
+    if (haveConstructor(args, Symbol)) {
+      return obj1.value === obj2.value;
+    }
+    if (obj1 === EmptyList && obj2 === EmptyList) {
+      return true;
+    }
+    // TODO bytevectors, records, ports, promises
+    if (haveConstructor(args, Pair)
+      || haveConstructor(args, Vector)
+      || haveConstructor(args, SchemeString)
+      // TODO not sure for the procedures
+      || haveConstructor(args, PrimitiveProcedure)
+      || haveConstructor(args, Procedure)
+      || haveConstructor(args, ContinuationProcedure)
+      || haveConstructor(args, Continuation)) {
+      return obj1 === obj2;
+    }
+    return false;
+  }  
   var primitiveFunctions = {
     'number?': function (args, env) {
       guardArgsCountExact(env, args.length, 1);
@@ -483,6 +518,8 @@ so it needs a revision for r7rs correctness.
       }
       return Unspecified;
     },
+    'eq?': isEquivalent,
+    'eqv?': isEquivalent,
   };
   function addPrimitivesAndLang(env, lang) {
     env.addVar(langName, lang);

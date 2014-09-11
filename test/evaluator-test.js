@@ -163,6 +163,15 @@ describe('evaluation', function () {
       var res = evaluator.evaluate(text);
       expect(res).to.equal(5);
     });
+    it('named let should not exaust stack', function () {
+      var text = '\n\
+      (let foo ((x 0))\n\
+        (if (= x 2000)\n\
+          x\n\
+          (foo (+ x 1))))';
+      var res = evaluator.evaluate(text);
+      expect(res).to.equal(2000);
+    });
     it('let variables scope', function () {
       var text = '\n\
       (let ((x 2) (y 3))\n\
@@ -455,6 +464,50 @@ describe('evaluation', function () {
       (list-product (list 1 2 3 4))';
       var res = evaluator.evaluate(text);
       expect(res).to.equal(24);
+    });
+  });
+  describe('do', function () {
+    it('should evaluate simple do', function () {
+      var text = '\n\
+      (do ((vec (vector 0 0 0 0 0))\n\
+           (i 0 (+ i 1)))\n\
+          ((= i 5) vec)\n\
+        (vector-set! vec i i))';
+      var res = evaluator.evaluate(text);
+      expect(res + '').to.equal('#(0 1 2 3 4)');
+    });
+    it('should evaluate simple do 2', function () {
+      var text = '\n\
+      (let ((x \'(1 3 5 7 9)))\n\
+        (do ((x x (cdr x))\n\
+             (sum 0 (+ sum (car x))))\n\
+            ((null? x) sum)))';
+      var res = evaluator.evaluate(text);
+      expect(res).to.equal(25);
+    });
+    it('should not exaust stack', function () {
+      var text = '\n\
+      (do ((i 0 (+ i 1)))\n\
+          ((= i 2000) i))';
+      var res = evaluator.evaluate(text);
+      expect(res).to.equal(2000);
+    });
+    it('should not intermingle internal symbols used for do forms', function () {
+      var text = '\n\
+      (do ((i 0 (+ i 1))\n\
+           (j 0))\n\
+          ((= i 100) (* i j))\n\
+          (set! j (do ((j 0 (+ j 1)))\n\
+              ((= j 10) j))))';
+      var res = evaluator.evaluate(text);
+      expect(res).to.equal(1000);
+      var text = '\n\
+      (do ((i 0 (+ i 1))\n\
+           (j 0 (do ((j 0 (+ j 1)))\n\
+                   ((= j 10) j))))\n\
+          ((= i 100) (* i j)))';
+      res = evaluator.evaluate(text);
+      expect(res).to.equal(1000);
     });
   });
 
@@ -904,6 +957,126 @@ describe('evaluation', function () {
         });
         it('should set k-th element of a vector', function () {
           expect(evaluator.evaluate('(let ((v (vector 1 2 3)))(vector-set! v 2 4) v)') + '').to.equal('#(1 2 4)');
+        });
+      });
+    });
+    describe('equivalence predicates', function () {
+      describe('eq?', function () {
+        it('should raise an error for calling with wrong number of arguments', function () {
+          expect(function () {
+            evaluator.evaluate('(eq? 1)');
+          }).to.throw(/Expected 2 arguments, but got 1/);
+        });
+        it('should return true for #t and #t', function () {
+          expect(evaluator.evaluate('(eq? #t #t)')).to.equal(true);
+        });
+        it('should return true for #f and #f', function () {
+          expect(evaluator.evaluate('(eq? #f #f)')).to.equal(true);
+        });
+        it('should return true for symbols with the same value', function () {
+          expect(evaluator.evaluate('(eq? \'abc \'abc)')).to.equal(true);
+        });
+        it('should return true for numbers with the same value', function () {
+          expect(evaluator.evaluate('(eq? 1.01 1.01)')).to.equal(true);
+        });
+        it('should return true for characters with the same value', function () {
+          expect(evaluator.evaluate('(eq? #\\a #\\a)')).to.equal(true);
+        });
+        it('should return true for comparing empty lists', function () {
+          expect(evaluator.evaluate('(eq? \'() \'())')).to.equal(true);
+        });
+        it('should return true for the same pair', function () {
+          expect(evaluator.evaluate('(let ((a (cons 1 2)))(eq? a a))')).to.equal(true);
+        });
+        it('should return true for the same vectors', function () {
+          expect(evaluator.evaluate('(let ((a (vector 1 2)))(eq? a a))')).to.equal(true);
+        });
+        it('should return true for the same strings', function () {
+          expect(evaluator.evaluate('(let ((a "abc"))(eq? a a))')).to.equal(true);
+        });
+        it('should return true for the same lambdas', function () {
+          expect(evaluator.evaluate('(let ((id (lambda (x) x)))(eq? id id))')).to.equal(true);
+        });
+        it('should return false for arguments of different types', function () {
+          expect(evaluator.evaluate('(eq? 1 #t)')).to.equal(false);
+        });
+        it('should return false for #t and #f', function () {
+          expect(evaluator.evaluate('(eq? #f #t)')).to.equal(false);
+        });
+        it('should return false for symbols with different values', function () {
+          expect(evaluator.evaluate('(eq? \'abc \'abcd)')).to.equal(false);
+        });
+        it('should return false for numbers with different values', function () {
+          expect(evaluator.evaluate('(eq? 1.01 1)')).to.equal(false);
+        });
+        it('should return false for characters with different values', function () {
+          expect(evaluator.evaluate('(eq? #\\a #\\b)')).to.equal(false);
+        });
+        it('should return false for comparing empty list with non empty list', function () {
+          expect(evaluator.evaluate('(eq? \'() (list 1 2))')).to.equal(false);
+        });
+        it('should return false for different pairs', function () {
+          expect(evaluator.evaluate('(eq? (cons 1 2) (cons 1 2))')).to.equal(false);
+        });
+        it('should return false for different vectors', function () {
+          expect(evaluator.evaluate('(eq? (vector 1 2) (vector 1 2))')).to.equal(false);
+        });
+        it('should return false for different strings', function () {
+          expect(evaluator.evaluate('(eq? "abc" "abc")')).to.equal(false);
+        });
+        it('should return false for different lambdas', function () {
+          expect(evaluator.evaluate('(eq? (lambda (x) x) (lambda (x) x))')).to.equal(false);
+        });
+        it('specification samples', function () {
+          expect(evaluator.evaluate('(eq? \'a \'a)')).to.equal(true);
+          expect(evaluator.evaluate('(eq? (list \'a) (list \'a))')).to.equal(false);
+          expect(evaluator.evaluate('(eq? car car)')).to.equal(true);
+          expect(evaluator.evaluate('(let ((x \'(a)))(eq? x x))')).to.equal(true);
+          expect(evaluator.evaluate('(let ((x \'#()))(eq? x x))')).to.equal(true);
+          expect(evaluator.evaluate('(let ((p (lambda (x) x)))(eq? p p))')).to.equal(true);
+        });
+      });
+      describe('eqv?', function () {
+        it('specification samples', function () {
+          expect(evaluator.evaluate('(eqv? \'a \'a)')).to.equal(true);
+          expect(evaluator.evaluate('(eqv? \'a \'b)')).to.equal(false);
+          expect(evaluator.evaluate('(eqv? 2 2)')).to.equal(true);
+          //expect(evaluator.evaluate('(eqv? 2 2.0)')).to.equal(false);
+          expect(evaluator.evaluate('(eqv? \'() \'())')).to.equal(true);
+          expect(evaluator.evaluate('(eqv? 100000000 100000000)')).to.equal(true);
+          expect(evaluator.evaluate('(eqv? (cons 1 2) (cons 1 2))')).to.equal(false);
+          expect(evaluator.evaluate('(eqv? (lambda () 1) (lambda () 2))')).to.equal(false);
+          expect(evaluator.evaluate('(let ((p (lambda (x) x)))(eqv? p p))')).to.equal(true);
+          expect(evaluator.evaluate('(eqv? #f \'nil)')).to.equal(false);
+          var text = '\n\
+          (define gen-counter\n\
+            (lambda ()\n\
+              (let ((n 0))\n\
+                (lambda () (set! n (+ n 1)) n))))\n\
+          (let ((g (gen-counter)))\n\
+            (eqv? g g))';
+          expect(evaluator.evaluate(text)).to.equal(true);
+          text = '\n\
+          (define gen-counter\n\
+            (lambda ()\n\
+              (let ((n 0))\n\
+                (lambda () (set! n (+ n 1)) n))))\n\
+          (eqv? (gen-counter) (gen-counter))';
+          expect(evaluator.evaluate(text)).to.equal(false);
+          text = '\n\
+          (define gen-loser\n\
+            (lambda ()\n\
+              (let ((n 0))\n\
+                (lambda () (set! n (+ n 1)) 27))))\n\
+          (let ((g (gen-loser)))\n\
+            (eqv? g g))';
+          expect(evaluator.evaluate(text)).to.equal(true);
+          text = '\n\
+          (letrec ((f (lambda () (if (eqv? f g) \'f \'both)))\n\
+                   (g (lambda () (if (eqv? f g) \'g \'both))))\n\
+            (eqv? f g))';
+          expect(evaluator.evaluate(text)).to.equal(false);
+          expect(evaluator.evaluate('(let ((x \'(a)))(eqv? x x))')).to.equal(true);
         });
       });
     });

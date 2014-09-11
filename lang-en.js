@@ -89,6 +89,8 @@
       'duplicate_definitions': 'Found multiple definitions for variable "{0}".',
       'data_not_procedure': 'Simple data cannot be used as a procedure.',
       'cond_else_last': '"else" can be used only at the last part of a "cond" expression.',
+      'cond_clause_end_unexpected': 'Unexpected end of a "cond" clause.',
+      'cond_clause_test_expected': 'Expected a test expression for a "cond" clause.',
       'bad_syntax': 'Bad syntax.',
     },
 
@@ -142,6 +144,8 @@
       'display': 'display',
       'newline': 'newline',
       'append': 'append',
+      'eq?': 'eq?',
+      'eqv?': 'eqv?',
     },
 
     'runtime-errors': {

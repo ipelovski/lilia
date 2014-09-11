@@ -69,12 +69,17 @@ so it needs a revision for r7rs correctness.
   var syntaxCache = {};
   // Holds the currently used natural language. A string.
   var currentLang = null;
+  // A cache for procedures' names for a given natural language.
+  var procedures = null;
   // Extracts values from the language tables and stores them
   // in the syntax caches.
   function populateSyntax(lang) {
     if (currentLang === lang) {
       return;
     }
+    procedures = {
+      'eqv?': langTable.get(lang, 'procedures', 'eqv?'),
+    };
     var existingSyntax = syntaxCache[lang];
     if (existingSyntax) {
       syntax = existingSyntax;
@@ -517,11 +522,12 @@ so it needs a revision for r7rs correctness.
   }
   // Reads a clause for a 'cond' expression from the given token stream.
   function readCondClause(tokenStream) {
-    var token = tokenStream.advance();
+    var token = tokenStream.peek();
     if (!token) {
-      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+      raiseError(tokenStream, 'cond_clause_end_unexpected');
     }
     if (token.type === TokenTypes.leftParen) {
+      tokenStream.advance();
       token = tokenStream.peek();
       var test, expression;
       var elseFound = false;
@@ -532,7 +538,7 @@ so it needs a revision for r7rs correctness.
       else {
         test = readExpression(tokenStream);
         if (!test) {
-          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+          raiseError(tokenStream, 'cond_clause_test_expected');
         }
       }
       token = tokenStream.peek();
@@ -561,6 +567,9 @@ so it needs a revision for r7rs correctness.
           expression = readExpression(tokenStream);
         }
         token = tokenStream.advance();
+        if (!token) {
+          raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+        }
         if (token.type === TokenTypes.rightParen) {
           if (elseFound) {
             return createCondElse(expressions);
@@ -573,6 +582,9 @@ so it needs a revision for r7rs correctness.
           raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
         }
       }
+    }
+    else {
+      return null;
     }
   }
   // Reads a 'cond' expression from the given token stream.
@@ -592,8 +604,214 @@ so it needs a revision for r7rs correctness.
       }
       clauses.push(clause);
       clause = readCondClause(tokenStream);
-    }    
+    }
+    var token = tokenStream.advance();
+    if (!token || token.type !== TokenTypes.rightParen) {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
     return createCond(clauses);
+  }
+  // function readCaseClause(tokenStream) {
+  //   var token = tokenStream.advance();
+  //   if (!token) {
+  //     raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //   }
+  //   if (token.type === TokenTypes.leftParen) {
+  //     token = tokenStream.advance();
+  //     if (!token) {
+  //       raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //     }
+  //     var elseFound = false;
+  //     var data = [];
+  //     if (isIdentifier(token) && token.value === syntax['else']) {
+  //       elseFound = true;
+  //     }
+  //     if (token.type === TokenTypes.leftParen) {
+  //       var datum = readExpression(tokenStream);
+  //       while (datum) {
+  //         if (datum.type !== FormTypes.identifier) {
+  //           raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //         }
+  //         else {
+  //           data.push(datum);
+  //           datum = readExpression(tokenStream);
+  //         }
+  //       }
+  //       token = tokenStream.advance();
+  //       if (!token) {
+  //         raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //       }
+  //       if (token.type !== TokenTypes.rightParen) {
+  //         raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //       }
+  //     }
+  //     var expressions = [];
+  //   }
+  // }
+  // function readCase(tokenStream) {
+  //   var key = readExpression(tokenStream);
+  //   if (!key) {
+  //     raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //   }
+  //   var clause = readCaseClause(tokenStream);
+  //   if (!clause) {
+  //     raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+  //   }
+  //   var clauses = [clause];
+  //   clause = readCaseClause(tokenStream);
+  //   while (clause) {
+  //     clauses.push(clause);
+  //     clause = readCaseClause(tokenStream);
+  //   }
+  // }
+  function readDoVariable(tokenStream) {
+    var token = tokenStream.advance();
+    if (!token) {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
+    if (token.type === TokenTypes.leftParen) {
+      var variable = readExpression(tokenStream);
+      if (!variable || variable.type !== FormTypes.variable) {
+        raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+      }
+      var init = readExpression(tokenStream);
+      if (!init) {
+        raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+      }
+      var step = readExpression(tokenStream);
+      token = tokenStream.advance();
+      if (token.type === TokenTypes.rightParen) {
+        return {
+          variable: variable.value,
+          init: init,
+          step: step
+        };
+      }
+      else {
+        raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+      }
+    }
+    else {
+      return null;
+    }
+  }
+  function readDoVariables(tokenStream) {
+    var token = tokenStream.advance();
+    if (!token) {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
+    if (token.type === TokenTypes.leftParen) {
+      var variables = [];
+      var variable = readDoVariable(tokenStream);
+      while (variable) {
+        variables.push(variable);
+        variable = readDoVariable(tokenStream);
+      }
+      return variables;
+    }
+    else {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
+  }
+  function readDoTest(tokenStream) {
+    var token = tokenStream.advance();
+    if (!token) {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
+    if (token.type === TokenTypes.leftParen) {
+      var test = readExpression(tokenStream);
+      if (!test) {
+        raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+      }
+      var expressions = [];
+      var expression = readExpression(tokenStream);
+      while (expression) {
+        expressions.push(expression);
+        expression = readExpression(tokenStream);
+      }
+      token = tokenStream.advance();
+      if (token.type === TokenTypes.rightParen) {
+        return {
+          test: test,
+          expressions: expressions
+        };
+      }
+      else {
+        raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+      }
+    }
+    else {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
+  }
+  // Reads a 'do' expression from the given token stream.
+  function readDo(tokenStream) {
+    var variables = readDoVariables(tokenStream);
+    var test = readDoTest(tokenStream);
+    var commands = [];
+    var command = readExpression(tokenStream);
+    while (command) {
+      commands.push(command);
+      command = readExpression(tokenStream);
+    }
+    var token = tokenStream.advance();
+    if (!token || token.type !== TokenTypes.rightParen) {
+      raiseError(tokenStream, 'bad_syntax'); // TODO make it specific
+    }
+    /*
+    (do ((variable1 init1 step1) ...)
+      (test expression ...)
+      command ...)
+    =>
+    ((lambda ()
+      (define @-60-@
+        (lambda (variable1 ...)
+          (if test
+            (begin expression ...)
+            (begin
+              command ...
+              (@-60-@ step1 ...)))))
+      (@-60-@ init1 ...)))
+
+    (do ((vec (vector 0 0 0 0 0))
+         (i 0 (+ i 1)))
+        ((= i 5) vec)
+      (vector-set! vec i i))
+    =>
+    ((lambda ()
+      (define @-60-@
+        (lambda (vec i)
+          (if (= i 5)
+            (begin vec)
+            (begin
+              (vector-set! vec i i)
+              (@-60-@ vec (+ i 1))))))
+      (@-60-@ (vector 0 0 0 0 0) 0)))
+    */
+    var innerLambdaName = '@-60-@';
+    var innerLambdaVariable = createVariable(innerLambdaName);
+    var tailCall = createProcedureCall(innerLambdaVariable,
+      variables.map(function (variable) {
+        return variable.step || createVariable(variable.variable);
+      }));
+    commands.push(tailCall);
+    var ifExpression = createIf(test.test,
+      createBegin(test.expressions),
+      createBegin(commands));
+    var innerLambda = createLambda(
+      variables.map(function (variable) {
+        return variable.variable;
+      }),
+      [ifExpression]);
+    var outerLambdaBody = [
+      createDefinition(innerLambdaName, innerLambda),
+      createProcedureCall(createVariable(innerLambdaName),
+        variables.map(function (variable) {
+          return variable.init;
+        }))
+    ];
+    var outerLambda = createLambda([], outerLambdaBody);
+    return createProcedureCall(outerLambda, []);
   }
   // Reads procedure call from the given token stream.
   function readProcedureCall(tokenStream) {
@@ -699,8 +917,9 @@ so it needs a revision for r7rs correctness.
       && expression.nodes) { // ifelse can have nodes === null
       markTailContext(expression.nodes[0]);
     }
-    else if (expression.type === FormTypes.conjunction ||
-      expression.type === FormTypes.disjunction) {
+    else if (expression.type === FormTypes.conjunction
+      || expression.type === FormTypes.disjunction
+      || expression.type === FormTypes.begin) {
       var tests = expression.nodes;
       if (tests.length > 0) {
         markTailContext(tests[tests.length - 1]);
@@ -1275,6 +1494,10 @@ so it needs a revision for r7rs correctness.
         if (nextToken.value === syntax['begin']) {
           tokenStream.advance();
           return readBegin(tokenStream);
+        }
+        if (nextToken.value === syntax['do']) {
+          tokenStream.advance();
+          return readDo(tokenStream);
         }
         if (nextToken.value === syntax['quote']) {
           tokenStream.advance();

@@ -142,6 +142,8 @@
       'display': 'покажи',
       'newline': 'новред',
       'append': 'добави',
+      'eq?': 'ра?',
+      'eqv?': 'рав?',
     },
 
     'runtime-errors': {
