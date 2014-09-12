@@ -496,18 +496,18 @@ describe('evaluation', function () {
       var text = '\n\
       (do ((i 0 (+ i 1))\n\
            (j 0))\n\
-          ((= i 100) (* i j))\n\
+          ((= i 10) (* i j))\n\
           (set! j (do ((j 0 (+ j 1)))\n\
               ((= j 10) j))))';
       var res = evaluator.evaluate(text);
-      expect(res).to.equal(1000);
+      expect(res).to.equal(100);
       var text = '\n\
       (do ((i 0 (+ i 1))\n\
            (j 0 (do ((j 0 (+ j 1)))\n\
                    ((= j 10) j))))\n\
-          ((= i 100) (* i j)))';
+          ((= i 10) (* i j)))';
       res = evaluator.evaluate(text);
-      expect(res).to.equal(1000);
+      expect(res).to.equal(100);
     });
   });
 

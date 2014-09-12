@@ -1,6 +1,12 @@
 (function () {
   if (typeof require === 'undefined' && typeof window !== 'undefined') {
-    var basePath = window.location.pathname;    
+    var currentScript = document.currentScript || (function() {
+      var scripts = document.getElementsByTagName('script');
+      return scripts[scripts.length - 1];
+    })();
+    var a = document.createElement('a');
+    a.href = currentScript.src;
+    var basePath = a.pathname;
     var baseDir = basePath.substring(0, basePath.lastIndexOf('/') + 1);
     var modules = {};
     var loadFile = function loadFile(path) {
@@ -17,13 +23,18 @@
     };
     var loadModule = function loadModule(path, module) {
       var code = loadFile(path);
+      // adds the code to the source view of chrome dev tools
+      code = code + '//@ sourceURL=' + path + '\n//# sourceURL=' + path;
       var fn = new Function('require', 'module', 'exports', code);
+      fn.displayName = path; // sets a friendly name for the call stack
       var exports = module.exports = {};
+      // change the base directory to the one of the module currently being loaded
+      var oldBaseDir = baseDir;
+      baseDir = path.substring(0, path.lastIndexOf('/') + 1);
       fn(require, module, exports);
-      return {
-        exports: module.exports,
-        path: path
-      };
+      // return the base directory to its old value
+      baseDir = oldBaseDir;
+      module.path = path;
     };
     var requireFn = function require(path) {
       if (path.substr(-3) !== '.js') {
@@ -44,7 +55,7 @@
         if (segment === '..') {
           modulePathSegments.pop();
         }
-        else if (segment !== '') {
+        else if (segment !== '' && segment !== '.') {
           modulePathSegments.push(segment);
         }
       }
@@ -56,16 +67,16 @@
       else {
         // this should fix cyclic modules, not tested
         module = modules[modulePath] = {};
-        module = modules[modulePath] = loadModule(path, module);
+        loadModule(modulePath, module);
       }
       return module.exports;
     };
     window.require = requireFn;
   }
 
-  require('./common');
-  require('./lang-en');
-  var evaluator = require('./evaluator');
+  require('./src/common');
+  require('./src/lang-en');
+  var evaluator = require('./src/evaluator');
 
   if (typeof window !== 'undefined'){
     window.evaluator = evaluator;
