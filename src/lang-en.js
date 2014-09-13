@@ -146,6 +146,8 @@
       'append': 'append',
       'eq?': 'eq?',
       'eqv?': 'eqv?',
+      'string?': 'string?',
+      'js-eval': 'js-eval',
     },
 
     'runtime-errors': {

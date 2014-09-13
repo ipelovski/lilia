@@ -65,7 +65,7 @@
         module = modules[modulePath];
       }
       else {
-        // this should fix cyclic modules, not tested
+        // this fixes cyclic modules
         module = modules[modulePath] = {};
         loadModule(modulePath, module);
       }
@@ -75,10 +75,17 @@
   }
 
   require('./src/common');
-  require('./src/lang-en');
+  var langEn = require('./src/lang-en');
+  var langBg = require('./src/lang-bg');
   var evaluator = require('./src/evaluator');
 
   if (typeof window !== 'undefined'){
-    window.evaluator = evaluator;
+    window.lilia = {
+      evaluate: evaluator.evaluate,
+      initEval: evaluator.initEval,
+      setOutputPortHandler: evaluator.setOutputPortHandler,
+      'lang-en': langEn,
+      'lang-bg': langBg,
+    }
   }
 }());
