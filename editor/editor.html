@@ -106,13 +106,7 @@
 	<script type="text/javascript" src="lib/matchbrackets.js"></script>
 	<script type="text/javascript" src="lib/show-hint.js"></script>
 	<script type="text/javascript" src="lib/anyword-hint.js"></script>
-	<script type="text/javascript" src="../common.js"></script>
-  <script type="text/javascript" src="../lang-table.js"></script>
-  <script type="text/javascript" src="../lang-en.js"></script>
-  <script type="text/javascript" src="../lang-bg.js"></script>
-	<script type="text/javascript" src="../lexer.js"></script>
-	<script type="text/javascript" src="../parser.js"></script>
-	<script type="text/javascript" src="../evaluator.js"></script>
+	<script type="text/javascript" src="../lilia-packed.js"></script>
 </head>
 <body>
 	<div>
@@ -134,7 +128,7 @@
 	<script type="text/javascript">
 		var keywords = [];
 		function setKeywords(lang) {
-			var langData = window['lang-' + lang];
+			var langData = lilia['lang-' + lang];
 			keywords = Object.keys(langData.syntax)
 				.map(function (key) {
 					return langData.syntax[key];
@@ -203,13 +197,11 @@
 			},
 		});
 		function innerConsoleLog(text, cssClass) {
-			//document.getElementById('console').value = '> ' + text;
-
-			// var je = jQuery.Event('keydown');
-			// je.keyCode = 13;
-			// customConsole.typer.trigger(je);
 			if (text) {
 				customConsole.commandResult(text, cssClass);
+			}
+			else {
+				customConsole.commandResult([]);
 			}
 		}
 		function consoleLog(text) {
@@ -256,7 +248,7 @@
 				keywords: (function () {
 					var keywords = [];
 					['en', 'bg'].forEach(function (lang) {
-						var langData = window['lang-' + lang];
+						var langData = lilia['lang-' + lang];
 						keywords = keywords
 							.concat(Object.keys(langData.syntax)
 								.map(function (key) {
@@ -272,7 +264,7 @@
 				indentKeys: (function () {
 					var keys = [];
 					['en', 'bg'].forEach(function (lang) {
-						var langData = window['lang-' + lang];
+						var langData = lilia['lang-' + lang];
 						keys = keys.concat([
 							langData.syntax['define'],
 							langData.syntax['let'],
@@ -312,7 +304,7 @@
 		};
 		showCursorPosition();
 
-		evaluator.setOutputPortHandler(function (data) {
+		lilia.setOutputPortHandler(function (data) {
 			var lines = data.split('\n');
 			var line;
 			for (var i = 0, l = lines.length - 1; i < l; i++) {
@@ -326,7 +318,7 @@
 				customConsole.message(line);
 			}
 		});
-		var evaluate = evaluator.initEval('en');
+		var evaluate = lilia.initEval('en');
 		setKeywords('en');
 		
 		function runScheme() {
@@ -351,11 +343,11 @@
 		}
 		document.getElementById('button-run').addEventListener('click', runScheme);
 		document.getElementById('en-en-lang').addEventListener('click', function() {
-			evaluate = evaluator.initEval('en');
+			evaluate = lilia.initEval('en');
 			setKeywords('en');
 		});
 		document.getElementById('bg-bg-lang').addEventListener('click', function() {
-			evaluate = evaluator.initEval('bg');
+			evaluate = lilia.initEval('bg');
 			setKeywords('bg');
 		});
 		document.getElementById('button-clear').addEventListener('click', function () {
