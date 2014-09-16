@@ -120,7 +120,7 @@ function readLet(parsingInfo) {
     formals[i] = bindings[i].variable;
     inits[i] = bindings[i].init;
   }
-  var procedure = createLambda(formals, body, parsingInfo);
+  var procedure = createLambda(parsingInfo, formals, body);
   if (!name) {
     /*
     (let ((a 0)) (+ a 1)) =>
@@ -145,7 +145,7 @@ function readLet(parsingInfo) {
     */
     var lambdaDefinition = createDefinition(name, procedure);
     var lambdaApplication = createProcedureCall(createVariable(name), inits);
-    var enclosingProcedure = createLambda([], [lambdaDefinition, lambdaApplication], parsingInfo);
+    var enclosingProcedure = createLambda(parsingInfo, [], [lambdaDefinition, lambdaApplication]);
     return createProcedureCall(enclosingProcedure, []);
   }
 }
@@ -167,7 +167,7 @@ function readLetrec(parsingInfo) {
     definitions[i] = createDefinition(binding.variable, binding.init);
   }
   body = definitions.concat(body);
-  var procedure = createLambda([], body, parsingInfo);
+  var procedure = createLambda(parsingInfo, [], body);
   return createProcedureCall(procedure, []);
 }
 // Reads a 'let*' expression
@@ -185,14 +185,14 @@ function readLetstar(parsingInfo) {
   var bindingsCount = bindings.length;
   var formals, inits, procedure;
   if (bindingsCount === 0) {
-    procedure = createLambda([], body, parsingInfo);
+    procedure = createLambda(parsingInfo, [], body);
     return createProcedureCall(procedure, []);
   }
   else {
     for (var i = bindingsCount - 1; i >= 0; i--) {
       formals = [bindings[i].variable];
       inits = [bindings[i].init];
-      procedure = createLambda(formals, body, parsingInfo);
+      procedure = createLambda(parsingInfo, formals, body);
       body = [createProcedureCall(procedure, inits)];
     }
     return body[0];

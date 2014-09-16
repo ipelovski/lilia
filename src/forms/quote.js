@@ -6,6 +6,7 @@ var ast = require('../ast');
 
 var TokenTypes = lexer.TokenTypes;
 var raiseSyntaxError = common.raiseSyntaxError;
+var createLiteral = ast.createLiteral;
 
 // A constant containing the types of simple data
 var simpleDatums = [
@@ -22,7 +23,7 @@ function readSimpleDatum(parsingInfo) {
   var token = tokenStream.peek();
   if (simpleDatums.indexOf(token.type) !== -1) {
     tokenStream.advance();
-    return ast.createLiteral(token.type, token.value);
+    return createLiteral(token.type, token.value);
   }
   return null;
 }
@@ -57,7 +58,7 @@ function readListDatum(parsingInfo) {
     tokenStream.advance();
   }
   if (token.type === TokenTypes.rightParen) {      
-    return ast.createLiteral('list', listItems);
+    return createLiteral('list', listItems);
   }
   else {
     raiseSyntaxError(parsingInfo, 'expected_list_end');
@@ -76,7 +77,7 @@ function readVectorDatum(parsingInfo) {
     raiseSyntaxError(parsingInfo, 'vector_end_unexpected');
   }
   if (token.type === TokenTypes.rightParen) {
-    return ast.createLiteral('vector', vectorItems);
+    return createLiteral('vector', vectorItems);
   }
   else {
     raiseSyntaxError(parsingInfo, 'expected_vector_end');
@@ -93,6 +94,12 @@ function readCompoundDatum(parsingInfo) {
   if (token.type === TokenTypes.vectorParen) {
     tokenStream.advance();
     return readVectorDatum(parsingInfo);
+  }
+  if (token.type === TokenTypes.quote) {
+    tokenStream.advance();
+    var quoteLiteral = createLiteral(TokenTypes.identifier, parsingInfo.syntax['quote']);
+    var datum = readDatum(parsingInfo);
+    return createLiteral('list', [quoteLiteral, datum]);
   }
   return null;
   // TODO read abbreviations
@@ -111,10 +118,10 @@ function readQuote(parsingInfo) {
   var datum = readDatum(parsingInfo);
   var token = tokenStream.advance();
   if (!token) {
-    raiseSyntaxError(parsingInfo, 'expr_end_unexpected', [syntax['quote']]);
+    raiseSyntaxError(parsingInfo, 'expr_end_unexpected', [parsingInfo.syntax['quote']]);
   }
   if (token.type !== TokenTypes.rightParen) {
-    raiseSyntaxError(parsingInfo, 'right_paren_expected', [syntax['quote']]);
+    raiseSyntaxError(parsingInfo, 'right_paren_expected', [parsingInfo.syntax['quote']]);
   }
   return datum;
 }

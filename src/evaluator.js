@@ -41,6 +41,7 @@ var Vector = types.Vector;
 var Pair = types.Pair;
 var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
+var SchemeError = types.SchemeError;
 
 var outputPort;
 function setOutputPortHandler(fn) {
@@ -133,7 +134,11 @@ var primitiveFunctions = {
     return Unspecified;
   },
   'eq?': isEquivalent,
-  'eqv?': isEquivalent,  
+  'eqv?': isEquivalent,
+  'raise': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    return new SchemeError(args[0].toString());
+  }
 };
 function addProceduers(env, lang, procedures) {
   for (var name in procedures) {
@@ -194,70 +199,19 @@ function applyArguments(formals, actualArgs, procEnv) {
   }
 }
 
-function evalListLiteral(listItems, env) {
-  if (listItems.length === 0) {
-    return EmptyList;
-  }
-  var listLength = listItems.length;
-  var improperList = listItems[listLength - 2] === '.';
-  var count = improperList ? listLength - 4 : listLength - 1;
-  var args = [];
-  var pair;
-  if (improperList) {
-    pair = new Pair(evalLiteral(listItems[listLength - 3], env),
-      evalLiteral(listItems[listLength - 1], env), true);
-  }
-  else {
-    pair = EmptyList;
-  }
-  for (var i = count; i >= 0; i--) {
-    pair = new Pair(evalLiteral(listItems[i], env), pair, true);
-  }
-  return pair;
-}
-function evalVectorLiteral(vectorItems, env) {
-  var count = vectorItems.length;
-  var args = new Array(count);
-  for (var i = 0; i < count; i++) {
-    args[i] = evalLiteral(vectorItems[i], env);
-  }
-  return Vector.create(args, env, true);
-}
-function evalLiteral(literal, env) {
-  var value = literal.value.value;
-  var type = literal.value.type;
-  switch (type) {
-    case TokenTypes.boolean:
-      return value;
-    case TokenTypes.number:
-      if (value.indexOf('.') === -1) {
-        return parseInt(value);
-      }
-      else {
-        return parseFloat(value);
-      }
-    case TokenTypes.character:
-      return value;
-    case TokenTypes.string:
-      return new SchemeString(value, true);
-    case TokenTypes.identifier:
-      return new Symbol(value);
-    case 'list':
-      return evalListLiteral(value, env);
-    case 'vector':
-      return evalVectorLiteral(value, env);
-    default:
-      raiseRuntimeError(env, 'unknown_type', [type]);
-  }
-}
-
 function peek(arr) {
   return arr[arr.length - 1];
+}
+function setProcedureName(value, identifier) {
+  if (value instanceof Procedure && !value.name) {
+    value.name = identifier;
+  }
 }
 function evalOPDefine(op, env) {
   var value = env.expressionStack.pop();
   var identifier = env.expressionStack.pop();
   env.addVar(identifier.value, value);
+  setProcedureName(value, identifier);
   env.expressionStack.push(Unspecified);
   return -1;
 }
@@ -272,6 +226,7 @@ function evalOPSet(op, env) {
   var value = env.expressionStack.pop();
   var identifier = env.expressionStack.pop();
   env.setVar(identifier.value, value);
+  setProcedureName(value, identifier);
   env.expressionStack.push(Unspecified);
   return -1;
 }
@@ -280,8 +235,8 @@ function evalOPVariable(op, env) {
   env.expressionStack.push(value);
   return -1;
 }
-function evalOPLiteral(op, env) {
-  var value = evalLiteral(op[1], env);
+function evalOPConstant(op, env) {
+  var value = op[1];
   env.expressionStack.push(value);
   return -1;
 }
@@ -313,7 +268,7 @@ function evalOPJumpIfNotFalseKeep(op, env) {
   }
 }
 function evalOPLambda(op, env) {
-  var procedure = new Procedure(op[1], op[2], env);
+  var procedure = new Procedure(op[1], op[2], env, op[3]);
   env.expressionStack.push(procedure);
   return -1;
 }
@@ -339,8 +294,8 @@ function evalOP(op, env) {
       return evalOPInternalDefine(op, env);
     case OPTypes.set:
       return evalOPSet(op, env);
-    case OPTypes.literal:
-      return evalOPLiteral(op, env);
+    case OPTypes.constant:
+      return evalOPConstant(op, env);
     case OPTypes.variable:
       return evalOPVariable(op, env);
     case OPTypes.jump:
@@ -358,6 +313,15 @@ function evalOP(op, env) {
     case OPTypes.void:
       return evalOPVoid(op, env);
   }
+}
+function getStack(envs) {
+  var procedure;
+  var stackInfo = [];
+  for (var i = envs.length - 1; i >= 0; i--) {
+    procedure = envs[i].calledProcedure;
+    stackInfo.push(procedure.name || 'anonymous');
+  }
+  return stackInfo.join('\n');
 }
 function evalOPs(ops, env) {
   function applyProcedure(procedure, actualArgs) {
@@ -385,13 +349,25 @@ function evalOPs(ops, env) {
         raiseRuntimeError(env, 'maximum_stack_size_exceeded');
       }
       var procedure = env.expressionStack.pop();
+      env.calledProcedure = procedure;
       var argsCount = op[1];
       var actualArgs = new Array(argsCount);
       for (var a = argsCount - 1; a >= 0; a--) {
         actualArgs[a] = env.expressionStack.pop();
       }
       if (procedure instanceof PrimitiveProcedure) {
-        value = procedure.execute(actualArgs, env);
+        try {
+          value = procedure.execute(actualArgs, env);
+        }
+        catch (e) {
+          var schemeError = new SchemeError(e.message);
+          schemeError.stack = getStack(envs);
+          return schemeError;
+        }
+        if (value instanceof SchemeError) {
+          value.stack = getStack(envs);
+          return value;
+        }
         env.expressionStack.push(value);
         idx = -1;
       }

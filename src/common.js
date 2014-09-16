@@ -28,11 +28,16 @@ function guardArgsCountMin(env, argsCount, expected) {
     raiseRuntimeError(env, 'min_args_count_expected', [expected, argsCount]);
   }
 }
+function guardArgsCountMax(env, argsCount, expected) {
+  if (argsCount > expected) {
+    raiseRuntimeError(env, 'max_args_count_expected', [expected, argsCount]);
+  }
+}
 function guardArgPredicate(env, arg, predicate, argPosition, predicateCat, predicateKey) {
   if (!predicate([arg], env)) {
     var lang = env.getVar(langName);
     var predicateName = langTable.get(lang, predicateCat, predicateKey);
-    raiseRuntimeError(env, 'argument_predicate_false', [argPosition, predicateName])
+    raiseRuntimeError(env, 'argument_predicate_false', [argPosition, predicateName]);
   }
 }
 function guardImmutable(env, arg) {
@@ -75,6 +80,7 @@ module.exports = {
   langName: langName,
   guardArgsCountExact: guardArgsCountExact,
   guardArgsCountMin: guardArgsCountMin,
+  guardArgsCountMax: guardArgsCountMax,
   guardArgPredicate: guardArgPredicate,
   guardImmutable: guardImmutable,
   cloneEnvs: cloneEnvs,

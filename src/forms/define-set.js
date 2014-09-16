@@ -8,6 +8,7 @@ var ast = require('../ast');
 var lambda = require('./lambda'); // TODO circular require
 
 var TokenTypes = lexer.TokenTypes;
+var FormTypes = ast.FormTypes;
 var readExpression = basic.readExpression;
 var isIdentifier = basic.isIdentifier;
 var isVariable = basic.isVariable;
@@ -88,6 +89,15 @@ function readDefintionHeader(parsingInfo) {
     raiseSyntaxError(parsingInfo, 'expected_lambda_formals_end');
   }
 }
+function setLambdaName(node) {
+  // if the value is lambda
+  if (node.nodes[1].type === FormTypes.lambda) {
+    // get the identifier
+    var identifier = node.nodes[0].value.value;
+    // set the name of the lambda
+    node.nodes[1].nodes[2].value = identifier;
+  }
+}
 // Reads a defintion form from the given token stream.
 function readDefintion(parsingInfo) {
   var tokenStream = parsingInfo.tokenStream;
@@ -109,7 +119,9 @@ function readDefintion(parsingInfo) {
         raiseSyntaxError(parsingInfo, 'definition_end_unexpected');
       }
       if (isVariable(parsingInfo.syntax, token)) {
-        return readValueAssignment(parsingInfo, createDefinition, formName);
+        var node = readValueAssignment(parsingInfo, createDefinition, formName);
+        //setLambdaName(node);
+        return node;
       }
       else if (token.type === TokenTypes.leftParen) {
         tokenStream.advance();
@@ -123,7 +135,7 @@ function readDefintion(parsingInfo) {
           raiseSyntaxError(parsingInfo, 'invalid_definition_body_end');
         }
         // markTailContext(body[body.length - 1]);
-        return createDefinition(header.identifier, createLambda(header.formals, body, parsingInfo));
+        return createDefinition(header.identifier, createLambda(parsingInfo, header.formals, body));
       }
     }
   }

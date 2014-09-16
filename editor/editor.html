@@ -106,7 +106,7 @@
 	<script type="text/javascript" src="lib/matchbrackets.js"></script>
 	<script type="text/javascript" src="lib/show-hint.js"></script>
 	<script type="text/javascript" src="lib/anyword-hint.js"></script>
-	<script type="text/javascript" src="../lilia.js"></script>
+	<script type="text/javascript" src="/simple-require.js"></script>
 </head>
 <body>
 	<div>
@@ -126,6 +126,9 @@
 	<div id="console"></div>
 	<input id="button-clear" type="button" value="Clear" />
 	<script type="text/javascript">
+		if (typeof lilia === 'undefined') {
+			require('./lilia');
+		}
 		var keywords = [];
 		function setKeywords(lang) {
 			var langData = lilia['lang-' + lang];
@@ -284,6 +287,7 @@
 		codeEditor.setValue(';start here, use Ctrl + Space or Tab for autocomplete\n');
 		codeEditor.setCursor(1, 0);
 
+		// TODO typing 'call-' and pressing TAB will ignore what is typed and show all suggestions
 		CodeMirror.hint.scheme = function(cm) {
 		  var inner = CodeMirror.hint.anyword(cm);
 	  	var list = inner.list;

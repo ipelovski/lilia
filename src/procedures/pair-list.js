@@ -1,9 +1,13 @@
 var common = require('../common');
 var types = require('../types');
+var numberProcedures = require('./number');
 
 var guardArgsCountExact = common.guardArgsCountExact;
+var guardArgsCountMin = common.guardArgsCountMin;
+var guardArgsCountMax = common.guardArgsCountMax;
 var guardArgPredicate = common.guardArgPredicate;
 var guardImmutable = common.guardImmutable;
+var raiseRuntimeError = common.raiseRuntimeError;
 
 var Pair = types.Pair;
 var EmptyList = types.EmptyList;
@@ -51,6 +55,78 @@ var pairListProcedures = {
     return Pair.isProperList(args[0]);
   },
   'list': Pair.createList,
+  'make-list': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardArgPredicate(env, args[0], numberProcedures['nonnegative-integer?'], 0, 'procedures', 'nonnegative-integer?');
+    var fill = 0;
+    if (args.length === 2) {
+      fill = args[1];
+    }
+    var arr = new Array(args[0]);
+    for (var i = 0; i < arr.length; i++) {
+      arr[i] = fill;
+    }
+    return Pair.createList(arr, env);
+  },
+  'length': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var list = args[0];
+    if (args === EmptyList) {
+      return 0;
+    }
+    var length = 0;
+    while (list instanceof Pair) {
+      length += 1;
+      list = list.cdr;      
+    }
+    if (list === EmptyList) {
+      return length;
+    }
+    else {
+      raiseRuntimeError(env, 'argument_predicate_false', [0, 'list?']);
+    }
+  },
+  'list-ref': function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    var k = args[1];
+    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+    guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    var pair = args[0];
+    var idx = 0;
+    while (pair instanceof Pair && idx < k) {
+      idx += 1;
+      pair = pair.cdr;
+    }
+    if (idx === k && pair instanceof Pair) {
+      return pair.car;
+    }
+    else {
+      var errorMessage = pair === EmptyList ? 'list_index_out_range' : 'list_index_reached_non_pair';
+      raiseRuntimeError(env, errorMessage, [idx]);
+    }
+  },
+  'list-set!': function (args, env) {
+    guardArgsCountExact(env, args.length, 3);
+    var k = args[1];
+    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+    guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    var pair = args[0];    
+    var idx = 0;
+    while (pair instanceof Pair && idx < k) {
+      idx += 1;
+      pair = pair.cdr;
+    }
+    if (idx === k && pair instanceof Pair) {
+      guardImmutable(env, pair);
+      pair.car = args[2];
+    }
+    else {
+      var errorMessage = pair === EmptyList ? 'list_index_out_range' : 'list_index_reached_non_pair';
+      raiseRuntimeError(env, errorMessage, [idx]);
+    }
+    return Unspecified;
+  },
   'append': function (args, env) {
     var argsCount = args.length;
     if (argsCount === 0) {

@@ -96,7 +96,7 @@ function readLambda(parsingInfo) {
   if (token.type !== TokenTypes.rightParen) {
     raiseSyntaxError(parsingInfo, 'invalid_lambda_body_end');
   }
-  return ast.createLambda(formals, body, parsingInfo);
+  return ast.createLambda(parsingInfo, formals, body);
 }
 
 basic.registerFormReader('lambda', readLambda);

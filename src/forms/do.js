@@ -152,11 +152,11 @@ function readDo(parsingInfo) {
   var ifExpression = createIf(test.test,
     createBegin(test.expressions),
     createBegin(commands));
-  var innerLambda = createLambda(
+  var innerLambda = createLambda(parsingInfo,
     variables.map(function (variable) {
       return variable.variable;
     }),
-    [ifExpression], parsingInfo);
+    [ifExpression]);
   var outerLambdaBody = [
     createDefinition(innerLambdaName, innerLambda),
     createProcedureCall(createVariable(innerLambdaName),
@@ -164,7 +164,7 @@ function readDo(parsingInfo) {
         return variable.init;
       }))
   ];
-  var outerLambda = createLambda([], outerLambdaBody, parsingInfo);
+  var outerLambda = createLambda(parsingInfo, [], outerLambdaBody);
   return createProcedureCall(outerLambda, []);
 }
 

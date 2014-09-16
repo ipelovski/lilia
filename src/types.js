@@ -10,6 +10,7 @@ function Environment(parent) {
   this.expressionStack = [];
   this.opIndex = 0;
   this.ops = null;
+  this.calledProcedure = null;
 }
 Environment.prototype.addVar = function addVar(name, value) {
   var idx = this.varNames.indexOf(name);
@@ -56,6 +57,7 @@ Environment.prototype.clone = function clone() {
   env.expressionStack = this.expressionStack.slice();
   env.opIndex = this.opIndex;
   env.ops = this.ops;
+  env.calledProcedure = this.calledProcedure;
   return env;
 };
 function OutputPort(fn) {
@@ -64,13 +66,19 @@ function OutputPort(fn) {
 OutputPort.prototype.emit = function emit(data) {
   this.fn(data);
 };
-function Procedure(args, body, env) {
+function Procedure(args, body, env, name) {
   this.args = args;
   this.body = body;
   this.env = env;
+  this.name = name;
 }
 Procedure.prototype.toString = function toString() {
-  return '#<procedure>';
+  if (this.name) {
+    return '#<procedure ' + this.name + '>';
+  }
+  else {
+    return '#<procedure>';
+  }
 };
 function PrimitiveProcedure(fn, name) {
   this.fn = fn;
@@ -107,7 +115,7 @@ function Symbol(value) {
 Symbol.prototype.valueOf = function valueOf() {
   return this.value;
 };
-Symbol.prototype.toString = function valueOf() {
+Symbol.prototype.toString = function toString() {
   return this.value;
 };
 function SchemeString(value, immutable) {
@@ -187,6 +195,18 @@ var Unspecified = Object.create(null);
 Unspecified.toString = function toString() {
   return '';
 };
+function SchemeError(message) {
+  this.message = message || 'Error';
+  this.stack = null;
+}
+SchemeError.prototype.toString = function toString() {
+  var res = '';
+  if (this.message) {
+    res += this.message + '\n';
+  }
+  res += this.stack;
+  return res;
+}
 
 module.exports = {
   Environment: Environment,
@@ -201,4 +221,5 @@ module.exports = {
   Pair: Pair,
   EmptyList: EmptyList,
   Unspecified: Unspecified,
+  SchemeError: SchemeError,
 };

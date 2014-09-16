@@ -5,12 +5,27 @@ var Unspecified = types.Unspecified;
 var numberProcedures = require('./number');
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
+var guardArgsCountMax = common.guardArgsCountMax;
 var guardArgPredicate = common.guardArgPredicate;
 var guardImmutable = common.guardImmutable;
 var raiseRuntimeError = common.raiseRuntimeError;
 
 var vectorProcedures = {
   'vector': Vector.create,
+  'make-vector': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardArgPredicate(env, args[0], numberProcedures['nonnegative-integer?'], 0, 'procedures', 'nonnegative-integer?');
+    var fill = 0;
+    if (args.length === 2) {
+      fill = args[1];
+    }
+    var arr = new Array(args[0]);
+    for (var i = 0; i < arr.length; i++) {
+      arr[i] = fill;
+    }
+    return Vector.create(arr, env);
+  },
   'vector?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return args[0] instanceof Vector;

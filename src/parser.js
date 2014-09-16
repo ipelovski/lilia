@@ -9,6 +9,7 @@ so it needs a revision for r7rs correctness.
 var lexer = require('./lexer');
 var langTable = require('./lang-table');
 var ast = require('./ast');
+var common = require('./common');
 var basic = require('./forms/basic');
 var defineSet = require('./forms/define-set');
 
@@ -19,6 +20,7 @@ require('./forms/cond');
 require('./forms/do');
 
 var TokenTypes = lexer.TokenTypes;
+var raiseSyntaxError = common.raiseSyntaxError;
 
 // A cache for syntaxes of all natural languages.
 var syntaxCache = {};
@@ -84,6 +86,15 @@ function readProgram(parsingInfo) {
   while (form) {
     forms.push(form);
     form = readCommandOrDefinition(parsingInfo);
+  }
+  var token = parsingInfo.tokenStream.advance();
+  if (token) {
+    if (token.type === TokenTypes.rightParen) {
+      raiseSyntaxError(parsingInfo, 'unnecessary_right_paren');
+    }
+    else {
+      raiseSyntaxError(parsingInfo, 'bad_syntax');
+    }
   }
   return ast.createProgram(forms);
 }

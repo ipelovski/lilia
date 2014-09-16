@@ -154,7 +154,7 @@ function createProcedureCall(procedure, args) {
 }
 // Converts definitions into internal definitions and assignments.
 // Checks for duplicate definitions.
-function transformAndCheckDefinitions(forms, parsingInfo) {
+function transformAndCheckDefinitions(parsingInfo, forms) {
   var identifiers = [];
   var exprFound = false;
   function traverse(forms) {
@@ -167,10 +167,12 @@ function transformAndCheckDefinitions(forms, parsingInfo) {
       if (form.type === FormTypes.definition) {
         // checks for expressions mixed with definitions
         if (exprFound) {
+          // TODO the position of the token stream will be incorrect
           raiseSyntaxError(parsingInfo, 'definition_expected_expr_found');
         }
         identifier = form.nodes[0].value.value;
         if (identifiers.indexOf(identifier) !== -1) {
+          // TODO the position of the token stream will be incorrect
           raiseSyntaxError(parsingInfo, 'duplicate_definitions', [identifier]);
         }
         else {
@@ -188,14 +190,15 @@ function transformAndCheckDefinitions(forms, parsingInfo) {
   return forms;
 }
 // A constructor for an AST node containing a lambda definition.
-function createLambda(formals, body, parsingInfo) {
-  body = transformAndCheckDefinitions(body, parsingInfo);
+function createLambda(parsingInfo, formals, body, name) {
+  body = transformAndCheckDefinitions(parsingInfo, body);
   if (body.length > 0) {
     markTailContext(body[body.length - 1]);
   }
   return createInnerNode(FormTypes.lambda,
     [createValueNode(FormTypes.lambdaFormals, formals),
-     createInnerNode(FormTypes.lambdaBody, body)]);
+     createInnerNode(FormTypes.lambdaBody, body),
+     createValueNode(FormTypes.variable, name)]);
 }
 // A constructor for an AST node containing an 'and' expression.
 function createConjunction(tests) {

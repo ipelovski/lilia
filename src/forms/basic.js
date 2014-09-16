@@ -12,13 +12,21 @@ var raiseSyntaxError = common.raiseSyntaxError;
 function isIdentifier(token) {
   return token.type === TokenTypes.identifier;
 }
+function isSyntax(value, syntax) {
+  for (var key in syntax) {
+    if (syntax[key] === value) {
+      return true;
+    }
+  }
+  return false;
+}
 // Checks if a token object contains a syntax keyword.
 function isSyntaticKeyword(syntax, token) {
-  return isIdentifier(token) && token.value in syntax;
+  return isIdentifier(token) && isSyntax(token.value, syntax);
 }
 // Checks if a token object contains a variable.
 function isVariable(syntax, token) {
-  return isIdentifier(token) && !(token.value in syntax);
+  return isIdentifier(token) && !isSyntax(token.value, syntax);
 }
 // Checks if a token object represents a self-evaluating expression.
 function isSelfEvaluating(token) {

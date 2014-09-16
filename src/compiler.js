@@ -3,16 +3,21 @@
 var lexer = require('./lexer');
 var parser = require('./parser');
 var ast = require('./ast');
-
-var createLiteral = ast.createLiteral;
+var types = require('./types');
 
 var TokenTypes = lexer.TokenTypes;
 var FormTypes = ast.FormTypes;
+var Symbol = types.Symbol;
+var Pair = types.Pair;
+var Vector = types.Vector;
+var SchemeString = types.SchemeString;
+var EmptyList = types.EmptyList;
+
 var OPTypes = {
   define: 'define',
   set: 'set',
   internaldefine: 'internaldefine',
-  literal: 'literal',
+  constant: 'constant',
   variable: 'variable',
   jump: 'jump',
   jumpiffalse: 'jumpiffalse',
@@ -25,6 +30,62 @@ var OPTypes = {
   void: 'void',
 };
 
+function evalListLiteral(listItems) {
+  if (listItems.length === 0) {
+    return EmptyList;
+  }
+  var listLength = listItems.length;
+  var improperList = listItems[listLength - 2] === '.';
+  var count = improperList ? listLength - 4 : listLength - 1;
+  var args = [];
+  var pair;
+  if (improperList) {
+    pair = new Pair(evalLiteral(listItems[listLength - 3]),
+      evalLiteral(listItems[listLength - 1]), true);
+  }
+  else {
+    pair = EmptyList;
+  }
+  for (var i = count; i >= 0; i--) {
+    pair = new Pair(evalLiteral(listItems[i]), pair, true);
+  }
+  return pair;
+}
+function evalVectorLiteral(vectorItems) {
+  var count = vectorItems.length;
+  var args = new Array(count);
+  for (var i = 0; i < count; i++) {
+    args[i] = evalLiteral(vectorItems[i]);
+  }
+  return Vector.create(args, null, true);
+}
+function evalLiteral(literal) {
+  var value = literal.value.value;
+  var type = literal.value.type;
+  switch (type) {
+    case TokenTypes.boolean:
+      return value;
+    case TokenTypes.number:
+      if (value.indexOf('.') === -1) {
+        return parseInt(value);
+      }
+      else {
+        return parseFloat(value);
+      }
+    case TokenTypes.character:
+      return value;
+    case TokenTypes.string:
+      return new SchemeString(value, true);
+    case TokenTypes.identifier:
+      return new Symbol(value);
+    case 'list':
+      return evalListLiteral(value);
+    case 'vector':
+      return evalVectorLiteral(value);
+    default:
+      throw new Error('Unkown type'); // TODO should raise a more user frienly error, is this code reachable?
+  }
+}
 function createCallOP(opType, form) {
   // form.nodes[0] are the procedure arguments
   // the op argument is the number of procedure arguments
@@ -48,8 +109,7 @@ function analyzeForm(form, idx, conds) {
     case FormTypes.assignment:
       return [OPTypes.set];
     case FormTypes.literal:
-      // TODO now it uses the ast nodes, should be changed to something simpler
-      return [OPTypes.literal, form];
+      return [OPTypes.constant, evalLiteral(form)];
     case FormTypes.variable:
       return [OPTypes.variable, form.value];
     case FormTypes.test:
@@ -103,7 +163,7 @@ function analyzeForm(form, idx, conds) {
     case FormTypes.conjunction:
       argsCount = form.nodes.length;
       if (argsCount === 0) {
-        return [OPTypes.literal, createLiteral(TokenTypes.boolean, true)];
+        return [OPTypes.constant, true];
       }
       else {
         while (argsCount > 0) {
@@ -117,7 +177,7 @@ function analyzeForm(form, idx, conds) {
     case FormTypes.disjunction:
       argsCount = form.nodes.length;
       if (argsCount === 0) {
-        return [OPTypes.literal, createLiteral(TokenTypes.boolean, false)];
+        return [OPTypes.constant, false];
       }
       else {
         while (argsCount > 0) {
@@ -141,7 +201,8 @@ function analyzeForm(form, idx, conds) {
       bodyCode = analyze([form.nodes[1]]);
       return [OPTypes.lambda,
         form.nodes[0].value, // lambda formals
-        bodyCode // analyzed lambda body
+        bodyCode, // analyzed lambda body
+        form.nodes[2].value // the name of the lambda
       ];
     case FormTypes.void: // TODO is it used?
       return [OPTypes.void];
@@ -178,13 +239,8 @@ function printOps(ops) {
   ops.forEach(function (op, idx) {
     var type = op[0];
     var value = '';
-    if (type === OPTypes.literal) {
-      value = op[1].value.value;
-    }
-    else {
-      for (var i = 1; i < op.length; i++) {
-        value += op[i] + ' ';
-      }
+    for (var i = 1; i < op.length; i++) {
+      value += op[i] + ' ';
     }
     console.log(idx + ' ' + type + ' ' + value);
   });
