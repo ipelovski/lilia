@@ -11,6 +11,7 @@ var Symbol = types.Symbol;
 var Pair = types.Pair;
 var Vector = types.Vector;
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
 var EmptyList = types.EmptyList;
 
 var OPTypes = {
@@ -73,7 +74,7 @@ function evalLiteral(literal) {
         return parseFloat(value);
       }
     case TokenTypes.character:
-      return value;
+      return new SchemeChar(value);
     case TokenTypes.string:
       return new SchemeString(value, true);
     case TokenTypes.identifier:

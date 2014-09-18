@@ -33,10 +33,12 @@ var Environment = types.Environment;
 var OutputPort = types.OutputPort;
 var Procedure = types.Procedure;
 var PrimitiveProcedure = types.PrimitiveProcedure;
+var Application = types.Application;
 var ContinuationProcedure = types.ContinuationProcedure;
 var Continuation = types.Continuation;
 var Symbol = types.Symbol;
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
 var Vector = types.Vector;
 var Pair = types.Pair;
 var EmptyList = types.EmptyList;
@@ -60,8 +62,8 @@ function isEquivalent(args, env) {
   if (typeof obj1 === 'number' && typeof obj2 === 'number') {
     return obj1 === obj2;
   }
-  if (typeof obj1 === 'string' && typeof obj2 === 'string') {
-    return obj1 === obj2; // chars
+  if (haveConstructor(args, SchemeChar)) {
+    return obj1.value === obj2.value;
   }
   if (haveConstructor(args, Symbol)) {
     return obj1.value === obj2.value;
@@ -100,7 +102,7 @@ function convertSchemeDictToJsObject(dict) {
   }
   return obj;
 }
-var procedureTypes = [Procedure, PrimitiveProcedure, ContinuationProcedure, Continuation];
+var procedureTypes = [Procedure, PrimitiveProcedure, Application, ContinuationProcedure, Continuation];
 function isProcedure(arg) {
   return procedureTypes.some(function (type) {
     return arg instanceof type;
@@ -114,7 +116,20 @@ var primitiveFunctions = {
   'not': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return args[0] === false;
-  },  
+  },
+  'boolean=?': function (args, env) {
+    guardArgsCountMin(env, args.length, 2);
+    var i;
+    for (i = 0; i < args.length; i++) {
+      guardArgPredicate(env, args[i], primitiveFunctions['boolean?'], i, 'procedures', 'boolean?');
+    }
+    for (i = 1; i < args.length; i++) {
+      if (args[i - 1] !== args[i]) {
+        return false;
+      }
+    }
+    return true;
+  },
   'procedure?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return isProcedure(args[0]);
@@ -138,7 +153,7 @@ var primitiveFunctions = {
   'raise': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return new SchemeError(args[0].toString());
-  }
+  },
 };
 function addProceduers(env, lang, procedures) {
   for (var name in procedures) {
@@ -155,7 +170,12 @@ function addPrimitivesAndLang(env, lang) {
   addProceduers(env, lang, vectorProcedures);
   addProceduers(env, lang, stringProcedures);
   addProceduers(env, lang, ffiProcedures);
+  addApplication(env, lang);
   addContinuationProcedures(env, lang);
+}
+function addApplication(env, lang) {
+  var translatedName = langTable.get(lang, 'procedures', 'apply');
+  env.addVar(translatedName, new Application(translatedName));
 }
 function callcc(args, env, envs) {
   guardArgsCountExact(env, args.length, 1);
@@ -318,7 +338,7 @@ function getStack(envs) {
   var procedure;
   var stackInfo = [];
   for (var i = envs.length - 1; i >= 0; i--) {
-    procedure = envs[i].calledProcedure;
+    procedure = envs[i].calledProcedure || {};
     stackInfo.push(procedure.name || 'anonymous');
   }
   return stackInfo.join('\n');
@@ -345,52 +365,105 @@ function evalOPs(ops, env) {
     op = ops[i];
     if (op[0] === OPTypes.call
       || op[0] === OPTypes.tailcall) {
-      if (envs.length >= maxEnvCount) {
-        raiseRuntimeError(env, 'maximum_stack_size_exceeded');
-      }
-      var procedure = env.expressionStack.pop();
-      env.calledProcedure = procedure;
-      var argsCount = op[1];
-      var actualArgs = new Array(argsCount);
-      for (var a = argsCount - 1; a >= 0; a--) {
-        actualArgs[a] = env.expressionStack.pop();
-      }
-      if (procedure instanceof PrimitiveProcedure) {
-        try {
+      var application = false;
+      while (true) {
+        if (envs.length >= maxEnvCount) {
+          raiseRuntimeError(env, 'maximum_stack_size_exceeded');
+        }
+        var procedure;
+        var actualArgs;
+        if (application) {
+          actualArgs = applicationArgs;
+          application = false;
+        }
+        else {
+          procedure = env.expressionStack.pop();
+          var argsCount = op[1];
+          actualArgs = new Array(argsCount);
+          for (var a = argsCount - 1; a >= 0; a--) {
+            actualArgs[a] = env.expressionStack.pop();
+          }
+        }
+
+        env.calledProcedure = procedure;
+
+        if (procedure instanceof PrimitiveProcedure) {
+          try {
+            value = procedure.execute(actualArgs, env);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          if (value instanceof SchemeError) {
+            value.stack = getStack(envs);
+            return value;
+          }
+          env.expressionStack.push(value);
+          idx = -1;
+        }
+        else if (procedure instanceof Procedure) {
+          try {
+            applyProcedure(procedure, actualArgs);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+        }
+        else if (procedure instanceof Application) {
+          procedure = actualArgs[0];
+          try {
+            guardArgPredicate(env, procedure, primitiveFunctions['procedure?'], 0, 'procedures', 'procedure?');
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          var applicationArgs = [];
+          for (var a = 1, l = actualArgs.length - 1; a < l; a++) {
+            applicationArgs.push(actualArgs[a]);
+          }
+          var lastArg = peek(actualArgs);
+          if (pairListProcedures['list?']([lastArg], env)) {
+            var argsVector = vectorProcedures['list->vector']([lastArg], env);
+            Array.prototype.push.apply(applicationArgs, argsVector.value);
+          }
+          else {
+            applicationArgs.push(lastArg);
+          }
+          application = true;
+          continue;
+        }
+        else if (procedure instanceof ContinuationProcedure) {
+          value = procedure.execute(actualArgs, env, envs);
+          // TODO the passed lambda should accept only one argument
+          procedure = actualArgs[0];
+          applyProcedure(procedure, [value]);
+        }
+        else if (procedure instanceof Continuation) {
           value = procedure.execute(actualArgs, env);
+          envs = value.envs;
+          env = peek(envs);
+          env.expressionStack.push(value.value);
+          ops = env.ops;
+          idx = env.opIndex + 1;
         }
-        catch (e) {
-          var schemeError = new SchemeError(e.message);
-          schemeError.stack = getStack(envs);
-          return schemeError;
-        }
-        if (value instanceof SchemeError) {
-          value.stack = getStack(envs);
-          return value;
-        }
-        env.expressionStack.push(value);
-        idx = -1;
-      }
-      else if (procedure instanceof Procedure) {
-        applyProcedure(procedure, actualArgs);
-      }
-      else if (procedure instanceof ContinuationProcedure) {
-        value = procedure.execute(actualArgs, env, envs);
-        // TODO the passed lambda should accept only one argument
-        procedure = actualArgs[0];
-        applyProcedure(procedure, [value]);
-      }
-      else if (procedure instanceof Continuation) {
-        value = procedure.execute(actualArgs, env);
-        envs = value.envs;
-        env = peek(envs);
-        env.expressionStack.push(value.value);
-        ops = env.ops;
-        idx = env.opIndex + 1;
+        break;
       }
     }
     else {
-      idx = evalOP(op, env);
+      try {
+        idx = evalOP(op, env);
+      }
+      catch (e) {
+        var schemeError = new SchemeError(e.message);
+        schemeError.stack = getStack(envs);
+        return schemeError;
+      }
     }
     if (idx !== -1) {
       i = idx;
@@ -421,7 +494,12 @@ function evalOPs(ops, env) {
 
 function evaluate(text, lang) {
   lang = lang || 'en';
-  var program = compiler.compile(text, lang);
+  try {
+    var program = compiler.compile(text, lang);
+  }
+  catch (e) {
+    return new SchemeError(e.message);
+  }
   var env = new Environment();
   addPrimitivesAndLang(env, lang);
   return evalOPs(program, env);

@@ -280,7 +280,7 @@ so it needs a revision for r7rs correctness.
           return readPeculiarIdentifier(char);
         }
       }
-      return null;
+      raiseError('invalid_token');
     }
     // A constant holding valid escaped characters in strings like \n, \r, \t.
     var validEscapedChars = get('valid_escaped_chars');
@@ -398,7 +398,7 @@ so it needs a revision for r7rs correctness.
     }
 
     // Checks if the character is a token and returns the token object.
-    function getTokenFromChar (char) {
+    function getTokenFromChar(char) {
       if (char === '(') {
         return createToken(TokenTypes.leftParen);
       }

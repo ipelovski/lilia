@@ -90,6 +90,9 @@ PrimitiveProcedure.prototype.execute = function execute(args, env) {
 PrimitiveProcedure.prototype.toString = function toString() {
   return '#<procedure ' + this.name + '>';
 };
+function Application(name) {
+  this.name = name || '';
+}
 function ContinuationProcedure(fn, name) {
   this.fn = fn;
   this.name = name || '';
@@ -127,6 +130,15 @@ SchemeString.prototype.valueOf = function valueOf() {
 };
 SchemeString.prototype.toString = function toString() {
   return '"' + this.value + '"';
+};
+function SchemeChar(value) {
+  this.value = value;
+}
+SchemeChar.prototype.valueOf = function valueOf() {
+  return this.value;
+};
+SchemeChar.prototype.toString = function toString() {
+  return '#\\' + this.value;
 };
 function Vector(items, immutable) {
   this.value = null;
@@ -213,10 +225,12 @@ module.exports = {
   OutputPort: OutputPort,
   Procedure: Procedure,
   PrimitiveProcedure: PrimitiveProcedure,
+  Application: Application,
   ContinuationProcedure: ContinuationProcedure,
   Continuation: Continuation,
   Symbol: Symbol,
   SchemeString: SchemeString,
+  SchemeChar: SchemeChar,
   Vector: Vector,
   Pair: Pair,
   EmptyList: EmptyList,

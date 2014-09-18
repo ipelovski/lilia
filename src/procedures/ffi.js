@@ -6,6 +6,7 @@ var stringProcedures = require('./string');
 var Environment = types.Environment;
 var Symbol = types.Symbol;
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
 var Vector = types.Vector;
 var Pair = types.Pair;
 var guardArgsCountExact = common.guardArgsCountExact;
@@ -19,11 +20,11 @@ function applySchemeProcedure(procedure, actualArgs) {
 }
 function convertSchemeObjectToJs(obj, env) {
   if (typeof obj === 'number'
-    || typeof obj === 'boolean'
-    || typeof obj === 'string') {
+    || typeof obj === 'boolean') {
     return obj;
   }
   if (obj instanceof SchemeString
+    || obj instanceof SchemeChar
     || obj instanceof Symbol) {
     return obj.value;
   }

@@ -2,11 +2,17 @@
   <head>
     <title>Scheme</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <link rel="stylesheet" href="../lib/mocha.css" />
+    <link rel="stylesheet" href="../lib/mocha.css" />    
+  </head>
+  <body>
+    <div id="mocha"></div>
+
     <script type="text/javascript" src="../lib/mocha.js"></script>
     <script type="text/javascript" src="../lib/chai.js"></script>
     <script type="text/javascript" src="../lib/blanket.js"> </script>
+    <!--
     <script type="text/javascript" src="../lib/mocha-blanket.js"></script>
+    -->
  
     <script type="text/javascript">
     mocha.setup('bdd');
@@ -16,6 +22,8 @@
     <script type="text/javascript" src="/simple-require.js"></script>
     <script type="text/javascript">
     require('./lilia');
+    require('./lilia-test');
+    mocha.run();
     </script>
     <!--
     <script type="text/javascript" src="common.js"></script>
@@ -24,11 +32,7 @@
     <script type="text/javascript" src="lexer.js"></script>
     <script type="text/javascript" src="parser.js"></script>
     <script type="text/javascript" src="evaluator.js"></script> 
-    -->
-    <script type="text/javascript" src="evaluator-test.js"></script>
     
-  </head>
-  <body>
-    <div id="mocha"></div>
+    <script type="text/javascript" src="evaluator-test.js"></script>-->
   </body>
 </html>

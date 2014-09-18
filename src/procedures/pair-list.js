@@ -13,6 +13,16 @@ var Pair = types.Pair;
 var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 
+function car(args, env) {
+  guardArgsCountExact(env, args.length, 1);
+  guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+  return args[0].car;
+}
+function cdr(args, env) {
+  guardArgsCountExact(env, args.length, 1);
+  guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+  return args[0].cdr;
+}
 var pairListProcedures = {
   'cons': function (args, env) {
     guardArgsCountExact(env, args.length, 2);
@@ -22,16 +32,8 @@ var pairListProcedures = {
     guardArgsCountExact(env, args.length, 1);
     return args[0] instanceof Pair;
   },
-  'car': function (args, env) {
-    guardArgsCountExact(env, args.length, 1);
-    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
-    return args[0].car;
-  },
-  'cdr': function (args, env) {
-    guardArgsCountExact(env, args.length, 1);
-    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
-    return args[0].cdr;
-  },
+  'car': car,
+  'cdr': cdr,
   'set-car!': function (args, env) {
     guardArgsCountExact(env, args.length, 2);
     guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
@@ -45,6 +47,18 @@ var pairListProcedures = {
     guardImmutable(env, args[0]);
     args[0].cdr = args[1];
     return Unspecified;
+  },
+  'caar': function (args, env) {
+    return car([car(args, env)], env);
+  },
+  'cadr': function (args, env) {
+    return car([cdr(args, env)], env);
+  },
+  'cdar': function (args, env) {
+    return cdr([car(args, env)], env);
+  },
+  'cddr': function (args, env) {
+    return cdr([cdr(args, env)], env);
   },
   'null?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
@@ -72,7 +86,7 @@ var pairListProcedures = {
   'length': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     var list = args[0];
-    if (args === EmptyList) {
+    if (list === EmptyList) {
       return 0;
     }
     var length = 0;
@@ -164,7 +178,25 @@ var pairListProcedures = {
       pair.cdr = last;
     }
     return first || last;
-  },  
+  },
+  'reverse': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var list = args[0];
+    if (list === EmptyList) {
+      return EmptyList;
+    }
+    var newList = EmptyList;
+    while (list instanceof Pair) {
+      newList = new Pair(list.car, newList);
+      list = list.cdr;      
+    }
+    if (list === EmptyList) {
+      return newList;
+    }
+    else {
+      raiseRuntimeError(env, 'argument_predicate_false', [0, 'list?']);
+    }
+  },
 };
 
 module.exports = pairListProcedures;
