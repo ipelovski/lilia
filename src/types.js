@@ -10,7 +10,7 @@ function Environment(parent) {
   this.expressionStack = [];
   this.opIndex = 0;
   this.ops = null;
-  this.calledProcedure = null;
+  this.procedure = null;
 }
 Environment.prototype.addVar = function addVar(name, value) {
   var idx = this.varNames.indexOf(name);
@@ -208,11 +208,11 @@ Unspecified.toString = function toString() {
   return '';
 };
 function SchemeError(message) {
-  this.message = message || 'Error';
+  this.message = message || '';
   this.stack = null;
 }
 SchemeError.prototype.toString = function toString() {
-  var res = '';
+  var res = 'Error: '; // TODO localize
   if (this.message) {
     res += this.message + '\n';
   }

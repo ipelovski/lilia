@@ -63,7 +63,7 @@ function raiseSyntaxError(parsingInfo, messageKey, messageParams) {
   err.column = position.column;
   err.toString = function() {
     return Error.prototype.toString.call(this) +
-      ' Line: ' + this.line + ', column: ' + this.column + '.';
+      ' (line: ' + this.line + ', column: ' + this.column + ')';
   };
   throw err;
 }

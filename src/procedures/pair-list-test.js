@@ -205,6 +205,7 @@ module.exports = {
       'sample 4':
         testOK('(append \'() \'a)', 'a'),
     },
+
     'reverse': {
       'should raise error for calling with wrong number of args':
         testFail('(reverse)', 'Expected 1 arguments, but got 0'),
@@ -214,6 +215,23 @@ module.exports = {
         testFail('(reverse \'(1 . (2 . (3 . 4))))', 'Expected argument on position 0 to satisfy predicate list?.'),
       'should return a reversed list':
         testOK('(reverse (list 1 2 3))', '(3 2 1)'),
+    },
+
+    'list-tail': {
+      'should raise error for calling with wrong number of args':
+        testFail('(list-tail)', 'Expected 2 arguments, but got 0'),
+      'should raise error for calling with wrong type of args':
+        testFail('(list-tail #(1 2) 1)', 'Expected argument on position 0 to satisfy predicate pair?.'),
+      'should raise error for calling with wrong type of args 2':
+        testFail('(list-tail (list 1 2) #t)', 'Expected argument on position 1 to satisfy predicate nonnegative-integer?.'),
+      'should raise error for accessing invalid index':
+        testFail('(list-tail (list 1 2) 2)', 'Index is out of range. The length of the list is 2.'),
+      'should raise error for indexing a non-pair':
+        testFail('(list-tail (quote (a . (b . c))) 2)', 'Index is out of range. A non-pair is reached at position 2.'),
+      'should return k-th sublist of a literal list':
+        testOK('(list-tail (quote (1 2 3)) 1)', '(2 3)'),
+      'should return k-th sublist of a new list':
+        testOK('(list-tail (list 1 2 3) 1)', '(2 3)'),
     },
   }
 };

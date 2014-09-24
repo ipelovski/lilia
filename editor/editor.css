@@ -1,0 +1,120 @@
+body {
+  background-color: #272822;
+  color: blanchedalmond;
+  /*background: linear-gradient(bisque, goldenrod);
+  height: 1000px;*/
+}
+textarea:focus, input:focus {
+  outline: 0;
+}
+#button-run {
+  /*background-color: darkgreen;*/
+  background: linear-gradient(forestgreen, darkgreen);
+  border: none;
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: bold;
+  font-size: medium;
+  color: blanchedalmond;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+#button-clear {
+  background: linear-gradient(forestgreen, darkgreen);
+  border: none;
+  border-radius: 5px;
+  padding: 5px;
+  color: blanchedalmond;
+  font-weight: bold;
+  margin-top: 5px;
+}
+div.CodeMirror {
+  border-radius: 10px;
+  border: solid 2px coral;
+}
+
+div#console {     
+  margin-top: 10px;
+}
+div#console div.jquery-console-inner {
+  width: 780px;
+  height: 200px;
+  background: linear-gradient(coral, chocolate);
+  padding: 12px;
+  overflow: auto;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+  font-size: 14px;
+  font-family: monospace;
+}
+div#console div.jquery-console-prompt-box {
+  color: maroon;      
+}
+div#console div.jquery-console-focus span.jquery-console-cursor {
+  background: #272822;
+  color: #eee;
+  font-weight: bold;
+}
+div#console div.jquery-console-message {
+  display: inline-block;
+  white-space: pre;
+}
+div#console div.jquery-console-message-break {
+  display: block;
+}
+div#console div.jquery-console-message-error {
+  color:#ef0505;
+  /*font-family:sans-serif;*/
+  padding:0.1em;
+}
+div#console div.jquery-console-message-success {
+  color:#187718;
+  padding:0.1em;
+}
+div#console span.jquery-console-prompt-label {
+  font-weight:bold;
+}
+div#console pre {
+  margin: 0;
+}
+
+.hint-description {
+  position: absolute;
+  z-index: 10;
+  overflow: auto;
+
+  margin: 0;
+  padding: 2px;
+
+  -webkit-box-shadow: 2px 3px 5px rgba(0,0,0,.2);
+  -moz-box-shadow: 2px 3px 5px rgba(0,0,0,.2);
+  box-shadow: 2px 3px 5px rgba(0,0,0,.2);
+  border-radius: 3px;
+  border: 1px solid silver;
+
+  background: #feedbb;
+  font-size: 90%;
+  font-family: monospace;
+
+  max-height: 20em;
+  max-width: 20em;
+  color: black;
+  cursor: pointer;
+}
+
+.CodeMirror-lint-tooltip {
+  background-color: infobackground;
+  border: 1px solid black;
+  border-radius: 4px 4px 4px 4px;
+  color: infotext;
+  font-family: monospace;
+  font-size: 10pt;
+  overflow: hidden;
+  padding: 2px 5px;
+  position: fixed;
+  white-space: pre;
+  white-space: pre-wrap;
+  z-index: 100;
+  max-width: 600px;
+}

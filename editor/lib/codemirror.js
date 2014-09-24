@@ -6785,7 +6785,9 @@
     } while (!chunk.lines);
     for (var i = 0; i < chunk.lines.length; ++i) {
       var line = chunk.lines[i], lh = line.height;
-      if (h < lh) break;
+      // ip changes
+      //if (h < lh) break;
+      if (h < lh * 0.8) break;
       h -= lh;
     }
     return n + i;

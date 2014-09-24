@@ -142,14 +142,14 @@ function createCond(clauses) {
   return createInnerNode(FormTypes.cond, clauses);
 }
 // A constructor for an AST node containing a procedure call.
-function createProcedureCall(procedure, args) {
+function createProcedureCall(procedure, args, position) {
   if (Array.isArray(args)) {
     return createInnerNode(FormTypes.procedureCall,
-      [createInnerNode(FormTypes.arguments, args), procedure]);
+      [createInnerNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
   }
   else {
     return createInnerNode(FormTypes.procedureCall,
-      [createValueNode(FormTypes.arguments, args), procedure]);
+      [createValueNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
   }
 }
 // Converts definitions into internal definitions and assignments.

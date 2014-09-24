@@ -1,19 +1,27 @@
 function testOK(code, expected) {
-  return function () {
+  var fn = function () {
     var value = lilia.evaluate(code);
     if (typeof expected === 'string') {
       value = value.toString();
     }
     expect(value).to.equal(expected);
   };
+  fn.toString = function toString() {
+    return code;
+  };
+  return fn;
 }
 
 function testFail(code, errorMessage) {
-  return function () {
+  var fn = function () {
     var value = lilia.evaluate(code);
     expect(value).to.have.property('message');
     expect(value.message).to.contain(errorMessage);
   };
+  fn.toString = function toString() {
+    return code;
+  };
+  return fn;
 }
 
 function testSkip(code, expected) {

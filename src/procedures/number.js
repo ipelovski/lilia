@@ -1,6 +1,7 @@
 var common = require('../common');
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
+var guardArgsCountMax = common.guardArgsCountMax;
 var raiseRuntimeError = common.raiseRuntimeError;
 
 function guardNumbers(env, args) {
@@ -9,6 +10,13 @@ function guardNumbers(env, args) {
       raiseRuntimeError(env, 'number_expected', [typeof args[i]]);
     }
   }
+}
+function mathFn(fn) {
+  return function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardNumbers(env, args);
+    return fn(args[0]);
+  };
 }
 var numberProcedures = {
   'number?': function (args, env) {
@@ -94,6 +102,40 @@ var numberProcedures = {
       }
     }
     return true;
+  },
+  'exp': mathFn(Math.exp),
+  'sin': mathFn(Math.sin),
+  'cos': mathFn(Math.cos),
+  'tan': mathFn(Math.tan),
+  'asin': mathFn(Math.asin),
+  'acos': mathFn(Math.acos),
+  'log': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardNumbers(env, args);
+    if (args.length === 1) {
+      return Math.log(args[0]);
+    }
+    else { // args.length === 2
+      return Math.log(args[0]) / Math.log(args[1]);
+    }
+  },
+  'atan': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardNumbers(env, args);
+    if (args.length === 1) {
+      return Math.atan(args[0]);
+    }
+    else { // args.length === 2
+      return Math.atan2(args[0], args[1]);
+    }
+  },
+  'sqrt': mathFn(Math.sqrt),
+  'expt': function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    guardNumbers(env, args);
+    return Math.pow(args[0], args[1]);
   },
 };
 

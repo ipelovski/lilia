@@ -1,3 +1,5 @@
+'use strict';
+
 var types = require('../types');
 var evaluator = require('../evaluator');
 var common = require('../common');
@@ -11,13 +13,8 @@ var Vector = types.Vector;
 var Pair = types.Pair;
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgPredicate = common.guardArgPredicate;
+var applySchemeProcedure = evaluator.applySchemeProcedure;
 
-function applySchemeProcedure(procedure, actualArgs) {
-  var formals = procedure.args;
-  var env = new Environment(procedure.env);
-  applyArguments(formals, actualArgs, env);
-  return evaluator.evalOPs(procedure.body, env);
-}
 function convertSchemeObjectToJs(obj, env) {
   if (typeof obj === 'number'
     || typeof obj === 'boolean') {
@@ -99,6 +96,24 @@ function convertJsObjectToScheme(obj) {
     }
   }
   return Unspecified;
+}
+function convertSchemeDictToJsObject(dict) {
+  var obj = {};
+  var list = dict, pair;
+  while (list instanceof Pair) {
+    pair = list.car;
+    obj[pair.car.toString()] = convertSchemeObjectToJs(pair.cdr);
+    list = list.cdr;      
+  }
+  return obj;
+}
+function listToVector(list) {
+  var arr = [];
+  while (list instanceof Pair) {
+    arr.push(list.car);
+    list = list.cdr;
+  }
+  return new Vector(arr);
 }
 var ffiProcedures = {
   'js-eval': function (args, env) {

@@ -46,11 +46,25 @@
         throw new Error('cannot load file');
       }
     };
+    var loadScript = function loadScript(path) {
+      var script = document.createElement("script")
+      script.type = "text/javascript";
+      script.src = path;
+      document.getElementsByTagName("head")[0].appendChild(script);
+    };
     var loadModule = function loadModule(path, module) {
       var code = loadFile(path);
       // adds the code to the source view of chrome dev tools
       code = code + '//@ sourceURL=' + path + '\n//# sourceURL=' + path;
-      var fn = new Function('require', 'module', 'exports', code);
+      var fn;
+      try {
+        fn = new Function('require', 'module', 'exports', code);
+      }
+      catch (e) { // there is a syntax error in the file
+        // load the file as a script so the browser should display the location of the syntax error
+        loadScript(path);
+        return;
+      }
       fn.displayName = path; // sets a friendly name for the call stack
       var exports = module.exports = {};
       var moduleRequire = baseRequire(path);

@@ -13,6 +13,7 @@ var compiler = require('./compiler');
 var lexer = require('./lexer');
 var langTable = require('./lang-table');
 var types = require('./types');
+var equivalenceProcedures = require('./procedures/equivalence');
 var numberProcedures = require('./procedures/number');
 var pairListProcedures = require('./procedures/pair-list');
 var vectorProcedures = require('./procedures/vector');
@@ -49,59 +50,7 @@ var outputPort;
 function setOutputPortHandler(fn) {
   outputPort = new OutputPort(fn);
 }
-function isEquivalent(args, env) {
-  guardArgsCountExact(env, args.length, 2);
-  function haveConstructor(args, constructor) {
-    return args[0] instanceof constructor && args[1] instanceof constructor;
-  }
-  var obj1 = args[0];
-  var obj2 = args[1];
-  if (typeof obj1 === 'boolean' && typeof obj2 === 'boolean') {
-    return obj1 === obj2;
-  }
-  if (typeof obj1 === 'number' && typeof obj2 === 'number') {
-    return obj1 === obj2;
-  }
-  if (haveConstructor(args, SchemeChar)) {
-    return obj1.value === obj2.value;
-  }
-  if (haveConstructor(args, Symbol)) {
-    return obj1.value === obj2.value;
-  }
-  if (obj1 === EmptyList && obj2 === EmptyList) {
-    return true;
-  }
-  // TODO bytevectors, records, ports, promises
-  if (haveConstructor(args, Pair)
-    || haveConstructor(args, Vector)
-    || haveConstructor(args, SchemeString)
-    // TODO not sure for the procedures
-    || haveConstructor(args, PrimitiveProcedure)
-    || haveConstructor(args, Procedure)
-    || haveConstructor(args, ContinuationProcedure)
-    || haveConstructor(args, Continuation)) {
-    return obj1 === obj2;
-  }
-  return false;
-}
-function listToVector(list) {
-  var arr = [];
-  while (list instanceof Pair) {
-    arr.push(list.car);
-    list = list.cdr;
-  }
-  return new Vector(arr);
-}
-function convertSchemeDictToJsObject(dict) {
-  var obj = {};
-  var list = dict, pair;
-  while (list instanceof Pair) {
-    pair = list.car;
-    obj[pair.car.toString()] = convertSchemeObjectToJs(pair.cdr);
-    list = list.cdr;      
-  }
-  return obj;
-}
+
 var procedureTypes = [Procedure, PrimitiveProcedure, Application, ContinuationProcedure, Continuation];
 function isProcedure(arg) {
   return procedureTypes.some(function (type) {
@@ -148,8 +97,6 @@ var primitiveFunctions = {
     }
     return Unspecified;
   },
-  'eq?': isEquivalent,
-  'eqv?': isEquivalent,
   'raise': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return new SchemeError(args[0].toString());
@@ -165,6 +112,7 @@ function addProceduers(env, lang, procedures) {
 function addPrimitivesAndLang(env, lang) {
   env.addVar(langName, lang);
   addProceduers(env, lang, primitiveFunctions);
+  addProceduers(env, lang, equivalenceProcedures);
   addProceduers(env, lang, numberProcedures);
   addProceduers(env, lang, pairListProcedures);
   addProceduers(env, lang, vectorProcedures);
@@ -180,6 +128,8 @@ function addApplication(env, lang) {
 function callcc(args, env, envs) {
   guardArgsCountExact(env, args.length, 1);
   guardArgPredicate(env, args[0], primitiveFunctions['procedure?'], 0, 'procedures', 'procedure?');
+  // remove the env in which the callcc is called
+  envs.pop();
   var clonedEnvs = cloneEnvs(envs);
   return new Continuation(clonedEnvs);
 }
@@ -217,6 +167,12 @@ function applyArguments(formals, actualArgs, procEnv) {
       procEnv.addVar(formals[i], actualArgs[i]);
     }
   }
+}
+function applySchemeProcedure(procedure, actualArgs) {
+  var formals = procedure.args;
+  var env = new Environment(procedure.env);
+  applyArguments(formals, actualArgs, env);
+  return evalOPs(procedure.body, env);
 }
 
 function peek(arr) {
@@ -334,12 +290,43 @@ function evalOP(op, env) {
       return evalOPVoid(op, env);
   }
 }
+function getCodeLocation(env) {
+  if (env.ops) { // if there is compiled code
+    var procedureCall = env.ops[env.opIndex];
+    var position = procedureCall[2];
+    if (position) {
+      return ' (line: ' + position.line + ', column: ' + position.column + ')';
+    }
+    else {
+      return '';
+    }
+  }
+  else {
+    return ' [native code]';
+  }
+}
 function getStack(envs) {
-  var procedure;
+  var env, procedure, procedureName, location;
   var stackInfo = [];
   for (var i = envs.length - 1; i >= 0; i--) {
-    procedure = envs[i].calledProcedure || {};
-    stackInfo.push(procedure.name || 'anonymous');
+    env = envs[i];
+    procedure = env.procedure;
+    location = getCodeLocation(env);
+    // if (!env.ops) { // a primitive procedure
+    //   env = envs[i - 1];
+    //   if (env) {
+    //     location = getCodeLocation(env);
+    //   }
+    // }
+    if (i > 0) {
+      if (procedure) {
+        procedureName = procedure.name || 'anonymous';
+      }
+    }
+    else { // global env
+      procedureName = 'global';
+    }
+    stackInfo.push(procedureName + location);
   }
   return stackInfo.join('\n');
 }
@@ -350,8 +337,9 @@ function evalOPs(ops, env) {
     if (op[0] === OPTypes.tailcall) {
       envs.pop();
     }
-    envs.push(env);
     applyArguments(formals, actualArgs, env);
+    envs.push(env);
+    env.procedure = procedure;
     ops = env.ops = procedure.body;
     idx = 0;
   }
@@ -385,7 +373,12 @@ function evalOPs(ops, env) {
           }
         }
 
-        env.calledProcedure = procedure;
+        if (!(procedure instanceof Procedure)) {
+          // if it is not Procedure it will not have an env, so it gets the global env
+          env = new Environment(envs[0]);
+          envs.push(env);
+          env.procedure = procedure;
+        }
 
         if (procedure instanceof PrimitiveProcedure) {
           try {
@@ -400,6 +393,8 @@ function evalOPs(ops, env) {
             value.stack = getStack(envs);
             return value;
           }
+          envs.pop();
+          env = peek(envs);
           env.expressionStack.push(value);
           idx = -1;
         }
@@ -436,16 +431,37 @@ function evalOPs(ops, env) {
             applicationArgs.push(lastArg);
           }
           application = true;
+          envs.pop();
+          env = peek(envs);
           continue;
         }
         else if (procedure instanceof ContinuationProcedure) {
-          value = procedure.execute(actualArgs, env, envs);
+          try {
+            value = procedure.execute(actualArgs, env, envs);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          env = peek(envs);
           // TODO the passed lambda should accept only one argument
           procedure = actualArgs[0];
           applyProcedure(procedure, [value]);
         }
         else if (procedure instanceof Continuation) {
-          value = procedure.execute(actualArgs, env);
+          try {
+            value = procedure.execute(actualArgs, env);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          // just clear the old env
+          envs.pop();
+          env = peek(envs);
+
           envs = value.envs;
           env = peek(envs);
           env.expressionStack.push(value.value);
@@ -514,7 +530,7 @@ function initEval(lang) {
   };
 }
 
-exports.evalOPs = evalOPs;
+exports.applySchemeProcedure = applySchemeProcedure;
 exports.evaluate = evaluate;
 exports.initEval = initEval;
 exports.setOutputPortHandler = setOutputPortHandler;

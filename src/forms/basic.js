@@ -56,7 +56,9 @@ function registerFormReader(formReaderKey, formReader) {
 
 // Reads procedure call from the given token stream.
 function readProcedureCall(parsingInfo) {
-  var token;
+  var tokenStream = parsingInfo.tokenStream;
+  var token = tokenStream.peek();
+  var position = { line: token.line, column: token.column };
   var procedure = readExpression(parsingInfo);
   var args = [];
   var expression = readExpression(parsingInfo);
@@ -64,14 +66,14 @@ function readProcedureCall(parsingInfo) {
     args.push(expression);
     expression = readExpression(parsingInfo);
   }
-  token = parsingInfo.tokenStream.advance();
+  token = tokenStream.advance();
   if (!token) {
     raiseSyntaxError(parsingInfo, 'proc_call_end_unexpected');
   }
   if (token.type !== TokenTypes.rightParen) {
     raiseSyntaxError(parsingInfo, 'invalid_proc_call');
   }
-  return ast.createProcedureCall(procedure, args);
+  return ast.createProcedureCall(procedure, args, position);
 }
 
 // Reads any expression from the given token stream.

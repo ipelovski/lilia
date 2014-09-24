@@ -98,7 +98,9 @@ function createCallOP(opType, form) {
   else {
     argsCount = args.value;
   }
-  return [opType, argsCount];
+  // the position of the procedure call in the code
+  var position = form.nodes[2].value;
+  return [opType, argsCount, position];
 }
 function analyzeForm(form, idx, conds) {
   var op, argsCount, i, bodyCode;

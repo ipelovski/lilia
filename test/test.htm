@@ -12,11 +12,31 @@
     <script type="text/javascript" src="../lib/blanket.js"> </script>
     <!--
     <script type="text/javascript" src="../lib/mocha-blanket.js"></script>
-    -->
+    
  
+<script type="text/javascript">
+(function(){
+function foo () {
+    bar()
+}
+function bar () {
+    baz()
+}
+function baz () {
+    [0].forEach(1)
+}
+try{
+foo()
+}
+catch(e){
+    console.log(e.stack)
+}
+}());
+</script>-->
+
     <script type="text/javascript">
     mocha.setup('bdd');
-    var expect = chai.expect;    
+    var expect = chai.expect;
     </script>
 
     <script type="text/javascript" src="/simple-require.js"></script>

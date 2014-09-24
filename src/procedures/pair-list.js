@@ -1,6 +1,9 @@
+'use strict';
+
 var common = require('../common');
 var types = require('../types');
 var numberProcedures = require('./number');
+var equivalenceProcedures = require('./equivalence');
 
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
@@ -13,6 +16,10 @@ var Pair = types.Pair;
 var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 
+var isEq = equivalenceProcedures['eq?'];
+var isEqv = equivalenceProcedures['eqv?'];
+var isEqual = equivalenceProcedures['equal?'];
+
 function car(args, env) {
   guardArgsCountExact(env, args.length, 1);
   guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
@@ -22,6 +29,51 @@ function cdr(args, env) {
   guardArgsCountExact(env, args.length, 1);
   guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
   return args[0].cdr;
+}
+function findMember(compare) {
+  return function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    guardArgPredicate(env, args[1], pairListProcedures['pair?'], 1, 'procedures', 'pair?');
+    var obj = args[0];
+    var pair = args[1];
+    while (pair instanceof Pair) {
+      if (compare([pair.car, obj], env)) {
+        return pair;
+      }
+      pair = pair.cdr;
+    }
+    if (pair === EmptyList) {
+      return false;
+    }
+    else {
+      raiseRuntimeError(env, 'improper_list');
+    }
+  };
+}
+function findPair(compare) {
+  return function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    guardArgPredicate(env, args[1], pairListProcedures['pair?'], 1, 'procedures', 'pair?');
+    var obj = args[0];
+    var pair = args[1];
+    var element;
+    while (pair instanceof Pair) {
+      element = pair.car;
+      if (!pairListProcedures['pair?']([element], env)) {
+        raiseRuntimeError(env, 'improper_alist');
+      }
+      if (compare([element.car, obj], env)) {
+        return element;
+      }
+      pair = pair.cdr;
+    }
+    if (pair === EmptyList) {
+      return false;
+    }
+    else {
+      raiseRuntimeError(env, 'improper_list');
+    }
+  };
 }
 var pairListProcedures = {
   'cons': function (args, env) {
@@ -196,6 +248,50 @@ var pairListProcedures = {
     else {
       raiseRuntimeError(env, 'argument_predicate_false', [0, 'list?']);
     }
+  },
+  'list-tail': function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    var k = args[1];
+    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+    guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    var pair = args[0];
+    var idx = 0;
+    while (pair instanceof Pair && idx < k) {
+      idx += 1;
+      pair = pair.cdr;
+    }
+    if (idx === k && pair instanceof Pair) {
+      return pair;
+    }
+    else {
+      var errorMessage = pair === EmptyList ? 'list_index_out_range' : 'list_index_reached_non_pair';
+      raiseRuntimeError(env, errorMessage, [idx]);
+    }
+  },
+  'memq': findMember(equivalenceProcedures['eq?']),
+  'memv': findMember(equivalenceProcedures['eqv?']),
+  'member': findMember(equivalenceProcedures['equal?']), // TODO implement (member obj list compare)
+  'assq': findPair(equivalenceProcedures['eq?']),
+  'assv': findPair(equivalenceProcedures['eqv?']),
+  'assoc': findPair(equivalenceProcedures['equal?']), // TODO implement (assoc obj alist compare)
+  'list-copy': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var obj = args[0];
+    if (!(obj instanceof Pair)) {
+      return obj;
+    }
+    var pair, nextPair, list;
+    list = pair = nextPair = new Pair(obj.car, obj.cdr);
+    obj = obj.cdr;
+    while (obj instanceof Pair) {
+      nextPair = new Pair(obj.car, obj.cdr);
+      if (pair) {
+        pair.cdr = nextPair;
+      }
+      pair = nextPair;
+      obj = obj.cdr;
+    }
+    return list;
   },
 };
 

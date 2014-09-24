@@ -133,7 +133,7 @@ so it needs a revision for r7rs correctness.
       err.column = column;
       err.toString = function() {
         return Error.prototype.toString.call(this) +
-          ' Line: ' + this.line + ', column: ' + this.column + '.';
+          ' (line: ' + this.line + ', column: ' + this.column + ')';
       };
       throw err;
     }
