@@ -42,7 +42,7 @@ Converts recursively a result from an evaluation to JavaScript objects. Primitiv
 ```
 var session = lilia.session('en');
 var result = session.evaluate('(list 1 2 3)');
-console.log(session.value(result));
+console.log(result.toJS());
 // prints [1, 2, 3]
 ```
 

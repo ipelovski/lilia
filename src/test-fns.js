@@ -4,6 +4,9 @@ function testOK(code, expected) {
     if (typeof expected === 'string') {
       value = value.toString();
     }
+    else {
+      value = value.valueOf();
+    }
     expect(value).to.equal(expected);
   };
   fn.toString = function toString() {
@@ -14,7 +17,7 @@ function testOK(code, expected) {
 
 function testFail(code, errorMessage) {
   var fn = function () {
-    var value = lilia.evaluate(code);
+    var value = lilia.evaluate(code).valueOf();
     expect(value).to.have.property('message');
     expect(value.message).to.contain(errorMessage);
   };

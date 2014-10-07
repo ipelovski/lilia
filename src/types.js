@@ -87,12 +87,11 @@ function PrimitiveProcedure(fn, name) {
 PrimitiveProcedure.prototype.execute = function execute(args, env) {
   return this.fn(args, env);
 };
-PrimitiveProcedure.prototype.toString = function toString() {
-  return '#<procedure ' + this.name + '>';
-};
+PrimitiveProcedure.prototype.toString = Procedure.prototype.toString;
 function Application(name) {
   this.name = name || '';
 }
+Application.prototype.toString = Procedure.prototype.toString;
 function ContinuationProcedure(fn, name) {
   this.fn = fn;
   this.name = name || '';
@@ -100,7 +99,7 @@ function ContinuationProcedure(fn, name) {
 ContinuationProcedure.prototype.execute = function execute(args, env, envs) {
   return this.fn(args, env, envs);
 };
-ContinuationProcedure.prototype.toString = PrimitiveProcedure.prototype.toString;
+ContinuationProcedure.prototype.toString = Procedure.prototype.toString;
 function Continuation(envs) {
   this.envs = envs;
 }
@@ -129,7 +128,18 @@ SchemeString.prototype.valueOf = function valueOf() {
   return this.value;
 };
 SchemeString.prototype.toString = function toString() {
-  return '"' + this.value + '"';
+  // TODO translate nrt to the current language
+  var value = this.value.replace(/[\t\n\r]/g, function (txt) {
+    switch (txt) {
+      case '\t':
+        return '\\t';
+      case '\n':
+        return '\\n';
+      case '\r':
+        return '\\r';
+    }
+  });
+  return '"' + value + '"';
 };
 function SchemeChar(value) {
   this.value = value;

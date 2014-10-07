@@ -694,9 +694,9 @@ function isProcedure(arg) {
     return arg instanceof type;
   });
 }
-function objectToString(obj, lang) {
+function objectToString(obj, env) {
   if (typeof obj === 'boolean') {
-    return '#' + langTable.get(lang, 'tokens', obj.toString());
+    return '#' + langTable.get(env.getVar(langName), 'tokens', obj.toString());
   }
   return obj.toString();
 }
@@ -746,7 +746,7 @@ var primitiveFunctions = {
     guardArgsCountExact(env, args.length, 1);
     var obj = args[0];    
     if (outputPort) {
-      outputPort.emit(objectToString(obj, env.getVar(langName)));
+      outputPort.emit(objectToString(obj, env));
     }
     return Unspecified;
   },
@@ -760,7 +760,7 @@ var primitiveFunctions = {
       return primitiveFunctions['write-string'](args, env);
     }
     if (outputPort) {
-      outputPort.emit(objectToString(obj, env.getVar(langName)));
+      outputPort.emit(objectToString(obj, env));
     }
     return Unspecified;
   },
@@ -4675,12 +4675,11 @@ function PrimitiveProcedure(fn, name) {
 PrimitiveProcedure.prototype.execute = function execute(args, env) {
   return this.fn(args, env);
 };
-PrimitiveProcedure.prototype.toString = function toString() {
-  return '#<procedure ' + this.name + '>';
-};
+PrimitiveProcedure.prototype.toString = Procedure.prototype.toString;
 function Application(name) {
   this.name = name || '';
 }
+Application.prototype.toString = Procedure.prototype.toString;
 function ContinuationProcedure(fn, name) {
   this.fn = fn;
   this.name = name || '';
@@ -4688,7 +4687,7 @@ function ContinuationProcedure(fn, name) {
 ContinuationProcedure.prototype.execute = function execute(args, env, envs) {
   return this.fn(args, env, envs);
 };
-ContinuationProcedure.prototype.toString = PrimitiveProcedure.prototype.toString;
+ContinuationProcedure.prototype.toString = Procedure.prototype.toString;
 function Continuation(envs) {
   this.envs = envs;
 }

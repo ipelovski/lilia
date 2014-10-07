@@ -107,31 +107,33 @@ CodeMirror.hint.scheme = function(cm) {
   else {
     list.push.apply(list, keywords);
   }
-  var selectedWord = null;
-  var descWidget = null;
-  CodeMirror.on(inner, 'shown', function () {
-    var widget = cm.state.completionActive.widget;
-    descWidget = new DescWidget(cm, widget);
-    if (selectedWord) {
-      descWidget.show(selectedWord);
-    }
-  });
-  CodeMirror.on(inner, 'select', function (word, element) {
-    if (!signatures[word]) {
-      word = '';
-    }
-    if (descWidget) {
-      descWidget.show(word);
-      descWidget.move(element);
-    }
-    else {
-      selectedWord = word;          
-    }
-  });
-  CodeMirror.on(inner, 'close', function () {       
-    descWidget.close();
-    descWidget = null;
-  });
+
+  // var selectedWord = null;
+  // var descWidget = null;
+  // CodeMirror.on(inner, 'shown', function () {
+  //   var widget = cm.state.completionActive.widget;
+  //   descWidget = new DescWidget(cm, widget);
+  //   if (selectedWord) {
+  //     descWidget.show(selectedWord);
+  //   }
+  // });
+  // CodeMirror.on(inner, 'select', function (word, element) {
+  //   if (!signatures[word]) {
+  //     word = '';
+  //   }
+  //   if (descWidget) {
+  //     descWidget.show(word);
+  //     descWidget.move(element);
+  //   }
+  //   else {
+  //     selectedWord = word;          
+  //   }
+  // });
+  // CodeMirror.on(inner, 'close', function () {       
+  //   descWidget.close();
+  //   descWidget = null;
+  // });
+  
   inner.list = list.sort();
   return inner;
 };
