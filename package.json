@@ -1,6 +1,6 @@
 {
   "name": "lilia",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A Scheme-like programming language running in the browser",
   "main": "app.js",
   "directories": {
@@ -21,5 +21,11 @@
   "author": "Ivan Pelovski",
   "license": "MIT",
   "readmeFilename": "README.md",
-  "gitHead": "b02a6ad7620fe6f429de890ed033e5814a135bfa"
+  "gitHead": "b02a6ad7620fe6f429de890ed033e5814a135bfa",
+  "dependencies": {
+    "body-parser": "^1.9.0",
+    "connect": "^3.2.0",
+    "marked": "^0.3.2",
+    "serve-static": "^1.6.3"
+  }
 }

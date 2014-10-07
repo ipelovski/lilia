@@ -206,7 +206,7 @@ so it needs a revision for r7rs correctness.
         if (char === charTrue || char === charFalse) {
           nextChar = getNextChar();
           // TODO #true and #false are also boolean literals
-          if (!isDelimeter(nextChar)) {
+          if (nextChar && !isDelimeter(nextChar)) {
             raiseError('invalid_token');
           }
           oldchar = nextChar;

@@ -31,8 +31,8 @@ function convertSchemeObjectToJs(obj, env) {
     });
   }
   if (obj instanceof Pair) {
-    if (isProperList(obj)) {
-      var isDict = obj.every(function (item) {
+    if (Pair.isProperList(obj)) {
+      var isDict = listToVector(obj).value.every(function (item) {
         return item instanceof Pair;
       });
       if (isDict) {
@@ -124,4 +124,5 @@ var ffiProcedures = {
   },
 };
 
-module.exports = ffiProcedures;
+exports.procedures = ffiProcedures;
+exports.convert = convertSchemeObjectToJs;

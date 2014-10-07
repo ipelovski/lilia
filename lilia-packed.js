@@ -7,8 +7,9 @@ var evaluator = require('./src/evaluator');
 if (typeof window !== 'undefined'){
   window.lilia = {
     evaluate: evaluator.evaluate,
-    initEval: evaluator.initEval,
+    session: evaluator.session,
     setOutputPortHandler: evaluator.setOutputPortHandler,
+    string: evaluator.string,
     'lang-en': langEn,
     'lang-bg': langBg,
   }
@@ -158,14 +159,14 @@ function createCond(clauses) {
   return createInnerNode(FormTypes.cond, clauses);
 }
 // A constructor for an AST node containing a procedure call.
-function createProcedureCall(procedure, args) {
+function createProcedureCall(procedure, args, position) {
   if (Array.isArray(args)) {
     return createInnerNode(FormTypes.procedureCall,
-      [createInnerNode(FormTypes.arguments, args), procedure]);
+      [createInnerNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
   }
   else {
     return createInnerNode(FormTypes.procedureCall,
-      [createValueNode(FormTypes.arguments, args), procedure]);
+      [createValueNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
   }
 }
 // Converts definitions into internal definitions and assignments.
@@ -337,7 +338,7 @@ function raiseSyntaxError(parsingInfo, messageKey, messageParams) {
   err.column = position.column;
   err.toString = function() {
     return Error.prototype.toString.call(this) +
-      ' Line: ' + this.line + ', column: ' + this.column + '.';
+      ' (line: ' + this.line + ', column: ' + this.column + ')';
   };
   throw err;
 }
@@ -375,6 +376,7 @@ var Symbol = types.Symbol;
 var Pair = types.Pair;
 var Vector = types.Vector;
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
 var EmptyList = types.EmptyList;
 
 var OPTypes = {
@@ -437,7 +439,7 @@ function evalLiteral(literal) {
         return parseFloat(value);
       }
     case TokenTypes.character:
-      return value;
+      return new SchemeChar(value);
     case TokenTypes.string:
       return new SchemeString(value, true);
     case TokenTypes.identifier:
@@ -461,7 +463,9 @@ function createCallOP(opType, form) {
   else {
     argsCount = args.value;
   }
-  return [opType, argsCount];
+  // the position of the procedure call in the code
+  var position = form.nodes[2].value;
+  return [opType, argsCount, position];
 }
 function analyzeForm(form, idx, conds) {
   var op, argsCount, i, bodyCode;
@@ -626,7 +630,7 @@ module.exports = {
   OPTypes: OPTypes,
   compile: compile,
 };
-},{"./ast":2,"./lexer":17,"./parser":18,"./types":24}],5:[function(require,module,exports){
+},{"./ast":2,"./lexer":17,"./parser":18,"./types":26}],5:[function(require,module,exports){
 /*
 A simple evaluator based on the grammer of r7rs small.
 Evaluates programming code by transforming it
@@ -642,11 +646,13 @@ var compiler = require('./compiler');
 var lexer = require('./lexer');
 var langTable = require('./lang-table');
 var types = require('./types');
+var equivalenceProcedures = require('./procedures/equivalence');
 var numberProcedures = require('./procedures/number');
 var pairListProcedures = require('./procedures/pair-list');
 var vectorProcedures = require('./procedures/vector');
 var stringProcedures = require('./procedures/string');
-var ffiProcedures = require('./procedures/ffi');
+var charProcedures = require('./procedures/char');
+var ffi = require('./procedures/ffi');
 
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
@@ -662,78 +668,37 @@ var Environment = types.Environment;
 var OutputPort = types.OutputPort;
 var Procedure = types.Procedure;
 var PrimitiveProcedure = types.PrimitiveProcedure;
+var Application = types.Application;
 var ContinuationProcedure = types.ContinuationProcedure;
 var Continuation = types.Continuation;
 var Symbol = types.Symbol;
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
 var Vector = types.Vector;
 var Pair = types.Pair;
 var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 var SchemeError = types.SchemeError;
 
+var ffiProcedures = ffi.procedures;
+var convert = ffi.convert;
+
 var outputPort;
 function setOutputPortHandler(fn) {
   outputPort = new OutputPort(fn);
 }
-function isEquivalent(args, env) {
-  guardArgsCountExact(env, args.length, 2);
-  function haveConstructor(args, constructor) {
-    return args[0] instanceof constructor && args[1] instanceof constructor;
-  }
-  var obj1 = args[0];
-  var obj2 = args[1];
-  if (typeof obj1 === 'boolean' && typeof obj2 === 'boolean') {
-    return obj1 === obj2;
-  }
-  if (typeof obj1 === 'number' && typeof obj2 === 'number') {
-    return obj1 === obj2;
-  }
-  if (typeof obj1 === 'string' && typeof obj2 === 'string') {
-    return obj1 === obj2; // chars
-  }
-  if (haveConstructor(args, Symbol)) {
-    return obj1.value === obj2.value;
-  }
-  if (obj1 === EmptyList && obj2 === EmptyList) {
-    return true;
-  }
-  // TODO bytevectors, records, ports, promises
-  if (haveConstructor(args, Pair)
-    || haveConstructor(args, Vector)
-    || haveConstructor(args, SchemeString)
-    // TODO not sure for the procedures
-    || haveConstructor(args, PrimitiveProcedure)
-    || haveConstructor(args, Procedure)
-    || haveConstructor(args, ContinuationProcedure)
-    || haveConstructor(args, Continuation)) {
-    return obj1 === obj2;
-  }
-  return false;
-}
-function listToVector(list) {
-  var arr = [];
-  while (list instanceof Pair) {
-    arr.push(list.car);
-    list = list.cdr;
-  }
-  return new Vector(arr);
-}
-function convertSchemeDictToJsObject(dict) {
-  var obj = {};
-  var list = dict, pair;
-  while (list instanceof Pair) {
-    pair = list.car;
-    obj[pair.car.toString()] = convertSchemeObjectToJs(pair.cdr);
-    list = list.cdr;      
-  }
-  return obj;
-}
-var procedureTypes = [Procedure, PrimitiveProcedure, ContinuationProcedure, Continuation];
+
+var procedureTypes = [Procedure, PrimitiveProcedure, Application, ContinuationProcedure, Continuation];
 function isProcedure(arg) {
   return procedureTypes.some(function (type) {
     return arg instanceof type;
   });
+}
+function objectToString(obj, lang) {
+  if (typeof obj === 'boolean') {
+    return '#' + langTable.get(lang, 'tokens', obj.toString());
+  }
+  return obj.toString();
 }
 var primitiveFunctions = {  
   'boolean?': function (args, env) {
@@ -743,15 +708,59 @@ var primitiveFunctions = {
   'not': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return args[0] === false;
-  },  
+  },
+  'boolean=?': function (args, env) {
+    guardArgsCountMin(env, args.length, 2);
+    var i;
+    for (i = 0; i < args.length; i++) {
+      guardArgPredicate(env, args[i], primitiveFunctions['boolean?'], i, 'procedures', 'boolean?');
+    }
+    for (i = 1; i < args.length; i++) {
+      if (args[i - 1] !== args[i]) {
+        return false;
+      }
+    }
+    return true;
+  },
   'procedure?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return isProcedure(args[0]);
   },
+  'write-string': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
+    if (outputPort) {
+      outputPort.emit(args[0].value);
+    }
+    return Unspecified;
+  },
+  'write-char': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardArgPredicate(env, args[0], charProcedures['char?'], 0, 'procedures', 'char?');
+    if (outputPort) {
+      outputPort.emit(args[0].value);
+    }
+    return Unspecified;
+  },
+  'write': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var obj = args[0];    
+    if (outputPort) {
+      outputPort.emit(objectToString(obj, env.getVar(langName)));
+    }
+    return Unspecified;
+  },
   'display': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
+    var obj = args[0];
+    if (obj instanceof SchemeChar) {
+      return primitiveFunctions['write-char'](args, env);
+    }
+    if (obj instanceof SchemeString) {
+      return primitiveFunctions['write-string'](args, env);
+    }
     if (outputPort) {
-      outputPort.emit(args[0].toString());
+      outputPort.emit(objectToString(obj, env.getVar(langName)));
     }
     return Unspecified;
   },
@@ -762,12 +771,10 @@ var primitiveFunctions = {
     }
     return Unspecified;
   },
-  'eq?': isEquivalent,
-  'eqv?': isEquivalent,
   'raise': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return new SchemeError(args[0].toString());
-  }
+  },
 };
 function addProceduers(env, lang, procedures) {
   for (var name in procedures) {
@@ -779,16 +786,25 @@ function addProceduers(env, lang, procedures) {
 function addPrimitivesAndLang(env, lang) {
   env.addVar(langName, lang);
   addProceduers(env, lang, primitiveFunctions);
+  addProceduers(env, lang, equivalenceProcedures);
   addProceduers(env, lang, numberProcedures);
   addProceduers(env, lang, pairListProcedures);
   addProceduers(env, lang, vectorProcedures);
   addProceduers(env, lang, stringProcedures);
+  addProceduers(env, lang, charProcedures);
   addProceduers(env, lang, ffiProcedures);
+  addApplication(env, lang);
   addContinuationProcedures(env, lang);
+}
+function addApplication(env, lang) {
+  var translatedName = langTable.get(lang, 'procedures', 'apply');
+  env.addVar(translatedName, new Application(translatedName));
 }
 function callcc(args, env, envs) {
   guardArgsCountExact(env, args.length, 1);
   guardArgPredicate(env, args[0], primitiveFunctions['procedure?'], 0, 'procedures', 'procedure?');
+  // remove the env in which the callcc is called
+  envs.pop();
   var clonedEnvs = cloneEnvs(envs);
   return new Continuation(clonedEnvs);
 }
@@ -826,6 +842,12 @@ function applyArguments(formals, actualArgs, procEnv) {
       procEnv.addVar(formals[i], actualArgs[i]);
     }
   }
+}
+function applySchemeProcedure(procedure, actualArgs) {
+  var formals = procedure.args;
+  var env = new Environment(procedure.env);
+  applyArguments(formals, actualArgs, env);
+  return evalOPs(procedure.body, env);
 }
 
 function peek(arr) {
@@ -943,12 +965,43 @@ function evalOP(op, env) {
       return evalOPVoid(op, env);
   }
 }
+function getCodeLocation(env) {
+  if (env.ops) { // if there is compiled code
+    var procedureCall = env.ops[env.opIndex];
+    var position = procedureCall[2];
+    if (position) {
+      return ' (line: ' + position.line + ', column: ' + position.column + ')';
+    }
+    else {
+      return '';
+    }
+  }
+  else {
+    return ' [native code]';
+  }
+}
 function getStack(envs) {
-  var procedure;
+  var env, procedure, procedureName, location;
   var stackInfo = [];
   for (var i = envs.length - 1; i >= 0; i--) {
-    procedure = envs[i].calledProcedure;
-    stackInfo.push(procedure.name || 'anonymous');
+    env = envs[i];
+    procedure = env.procedure;
+    location = getCodeLocation(env);
+    // if (!env.ops) { // a primitive procedure
+    //   env = envs[i - 1];
+    //   if (env) {
+    //     location = getCodeLocation(env);
+    //   }
+    // }
+    if (i > 0) {
+      if (procedure) {
+        procedureName = procedure.name || 'anonymous';
+      }
+    }
+    else { // global env
+      procedureName = 'global';
+    }
+    stackInfo.push(procedureName + location);
   }
   return stackInfo.join('\n');
 }
@@ -959,8 +1012,9 @@ function evalOPs(ops, env) {
     if (op[0] === OPTypes.tailcall) {
       envs.pop();
     }
-    envs.push(env);
     applyArguments(formals, actualArgs, env);
+    envs.push(env);
+    env.procedure = procedure;
     ops = env.ops = procedure.body;
     idx = 0;
   }
@@ -974,52 +1028,133 @@ function evalOPs(ops, env) {
     op = ops[i];
     if (op[0] === OPTypes.call
       || op[0] === OPTypes.tailcall) {
-      if (envs.length >= maxEnvCount) {
-        raiseRuntimeError(env, 'maximum_stack_size_exceeded');
-      }
-      var procedure = env.expressionStack.pop();
-      env.calledProcedure = procedure;
-      var argsCount = op[1];
-      var actualArgs = new Array(argsCount);
-      for (var a = argsCount - 1; a >= 0; a--) {
-        actualArgs[a] = env.expressionStack.pop();
-      }
-      if (procedure instanceof PrimitiveProcedure) {
-        try {
-          value = procedure.execute(actualArgs, env);
+      var application = false;
+      while (true) {
+        if (envs.length >= maxEnvCount) {
+          raiseRuntimeError(env, 'maximum_stack_size_exceeded');
         }
-        catch (e) {
-          var schemeError = new SchemeError(e.message);
-          schemeError.stack = getStack(envs);
-          return schemeError;
+        var procedure;
+        var actualArgs;
+        if (application) {
+          actualArgs = applicationArgs;
+          application = false;
         }
-        if (value instanceof SchemeError) {
-          value.stack = getStack(envs);
-          return value;
+        else {
+          procedure = env.expressionStack.pop();
+          var argsCount = op[1];
+          actualArgs = new Array(argsCount);
+          for (var a = argsCount - 1; a >= 0; a--) {
+            actualArgs[a] = env.expressionStack.pop();
+          }
         }
-        env.expressionStack.push(value);
-        idx = -1;
-      }
-      else if (procedure instanceof Procedure) {
-        applyProcedure(procedure, actualArgs);
-      }
-      else if (procedure instanceof ContinuationProcedure) {
-        value = procedure.execute(actualArgs, env, envs);
-        // TODO the passed lambda should accept only one argument
-        procedure = actualArgs[0];
-        applyProcedure(procedure, [value]);
-      }
-      else if (procedure instanceof Continuation) {
-        value = procedure.execute(actualArgs, env);
-        envs = value.envs;
-        env = peek(envs);
-        env.expressionStack.push(value.value);
-        ops = env.ops;
-        idx = env.opIndex + 1;
+
+        if (!(procedure instanceof Procedure)) {
+          // if it is not Procedure it will not have an env, so it gets the global env
+          env = new Environment(envs[0]);
+          envs.push(env);
+          env.procedure = procedure;
+        }
+
+        if (procedure instanceof PrimitiveProcedure) {
+          try {
+            value = procedure.execute(actualArgs, env);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          if (value instanceof SchemeError) {
+            value.stack = getStack(envs);
+            return value;
+          }
+          envs.pop();
+          env = peek(envs);
+          env.expressionStack.push(value);
+          idx = -1;
+        }
+        else if (procedure instanceof Procedure) {
+          try {
+            applyProcedure(procedure, actualArgs);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+        }
+        else if (procedure instanceof Application) {
+          procedure = actualArgs[0];
+          try {
+            guardArgPredicate(env, procedure, primitiveFunctions['procedure?'], 0, 'procedures', 'procedure?');
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          var applicationArgs = [];
+          for (var a = 1, l = actualArgs.length - 1; a < l; a++) {
+            applicationArgs.push(actualArgs[a]);
+          }
+          var lastArg = peek(actualArgs);
+          if (pairListProcedures['list?']([lastArg], env)) {
+            var argsVector = vectorProcedures['list->vector']([lastArg], env);
+            Array.prototype.push.apply(applicationArgs, argsVector.value);
+          }
+          else {
+            applicationArgs.push(lastArg);
+          }
+          application = true;
+          envs.pop();
+          env = peek(envs);
+          continue;
+        }
+        else if (procedure instanceof ContinuationProcedure) {
+          try {
+            value = procedure.execute(actualArgs, env, envs);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          env = peek(envs);
+          // TODO the passed lambda should accept only one argument
+          procedure = actualArgs[0];
+          applyProcedure(procedure, [value]);
+        }
+        else if (procedure instanceof Continuation) {
+          try {
+            value = procedure.execute(actualArgs, env);
+          }
+          catch (e) {
+            var schemeError = new SchemeError(e.message);
+            schemeError.stack = getStack(envs);
+            return schemeError;
+          }
+          // just clear the old env
+          envs.pop();
+          env = peek(envs);
+
+          envs = value.envs;
+          env = peek(envs);
+          env.expressionStack.push(value.value);
+          ops = env.ops;
+          idx = env.opIndex + 1;
+        }
+        break;
       }
     }
     else {
-      idx = evalOP(op, env);
+      try {
+        idx = evalOP(op, env);
+      }
+      catch (e) {
+        var schemeError = new SchemeError(e.message);
+        schemeError.stack = getStack(envs);
+        return schemeError;
+      }
     }
     if (idx !== -1) {
       i = idx;
@@ -1048,28 +1183,52 @@ function evalOPs(ops, env) {
   return env.expressionStack.pop();
 }
 
+function Result(object, env) {
+  this.object = object;
+  this.env = env;
+}
+Result.prototype.valueOf = function valueOf() {
+  return this.object;
+};
+Result.prototype.toString = function toString() {
+  return objectToString(this.object, this.env);
+};
+Result.prototype.toJS = function toJS() {
+  return convert(this.object, this.env);
+};
 function evaluate(text, lang) {
   lang = lang || 'en';
-  var program = compiler.compile(text, lang);
+  try {
+    var program = compiler.compile(text, lang);
+  }
+  catch (e) {
+    return new SchemeError(e.message);
+  }
   var env = new Environment();
   addPrimitivesAndLang(env, lang);
-  return evalOPs(program, env);
+  var result = evalOPs(program, env);
+  return new Result(result, env);
 }
-function initEval(lang) {
+function session(lang) {
   lang = lang || 'en';
   var env = new Environment();
   addPrimitivesAndLang(env, lang);
-  return function evalFragment(text) {
-    var fragment = compiler.compile(text, lang);
-    return evalOPs(fragment, env);
+  return {
+    environment: env,
+    evaluate: function evalFragment(text) {
+      var fragment = compiler.compile(text, lang);
+      var result = evalOPs(fragment, env);
+      return new Result(result, env);
+    },
   };
 }
 
-exports.evalOPs = evalOPs;
+exports.applySchemeProcedure = applySchemeProcedure;
 exports.evaluate = evaluate;
-exports.initEval = initEval;
+exports.session = session;
 exports.setOutputPortHandler = setOutputPortHandler;
-},{"./common":3,"./compiler":4,"./lang-table":16,"./lexer":17,"./procedures/ffi":19,"./procedures/number":20,"./procedures/pair-list":21,"./procedures/string":22,"./procedures/vector":23,"./types":24}],6:[function(require,module,exports){
+exports.string = toString;
+},{"./common":3,"./compiler":4,"./lang-table":16,"./lexer":17,"./procedures/char":19,"./procedures/equivalence":20,"./procedures/ffi":21,"./procedures/number":22,"./procedures/pair-list":23,"./procedures/string":24,"./procedures/vector":25,"./types":26}],6:[function(require,module,exports){
 'use strict';
 
 var common = require('../common');
@@ -1128,7 +1287,9 @@ function registerFormReader(formReaderKey, formReader) {
 
 // Reads procedure call from the given token stream.
 function readProcedureCall(parsingInfo) {
-  var token;
+  var tokenStream = parsingInfo.tokenStream;
+  var token = tokenStream.peek();
+  var position = { line: token.line, column: token.column };
   var procedure = readExpression(parsingInfo);
   var args = [];
   var expression = readExpression(parsingInfo);
@@ -1136,14 +1297,14 @@ function readProcedureCall(parsingInfo) {
     args.push(expression);
     expression = readExpression(parsingInfo);
   }
-  token = parsingInfo.tokenStream.advance();
+  token = tokenStream.advance();
   if (!token) {
     raiseSyntaxError(parsingInfo, 'proc_call_end_unexpected');
   }
   if (token.type !== TokenTypes.rightParen) {
     raiseSyntaxError(parsingInfo, 'invalid_proc_call');
   }
-  return ast.createProcedureCall(procedure, args);
+  return ast.createProcedureCall(procedure, args, position);
 }
 
 // Reads any expression from the given token stream.
@@ -2337,38 +2498,85 @@ var data = {
     '<': '<',
     'number?': 'число?',
     'nonnegative-integer?': 'неотрицателно-цяло-число?',
+    'exp': 'експ',
+    'log': 'лог',
+    'sin': 'син',
+    'cos': 'кос',
+    'tan': 'тан',
+    'asin': 'асин',
+    'acos': 'акос',
+    'atan': 'атан',
+    'sqrt': 'квкорен',
+    'expt': 'степен',
+
     'boolean?': 'булева?',
     'not': 'не',
+    'boolean=?': 'булеви=?',
     'list': 'списък',
     'make-list': 'създай-списък',
     'cons': 'конс',
     'pair?': 'двойка?',
     'car': 'първо',
-    'cdr': 'останало',
+    'cdr': 'второ',
     'set-car!': 'смени-първо!',
-    'set-cdr!': 'смени-останало!',
+    'set-cdr!': 'смени-второ!',
+    'caar': 'пърпърво',
+    'cadr': 'първторо',
+    'cdar': 'втопърво',
+    'cddr': 'втовторо',
     'null?': 'нищо?',
     'list?': 'списък?',
     'length': 'дължина',
     'list-ref': 'списък-вземи',
     'list-set!': 'списък-смени!',
+    'append': 'добави',
+    'reverse': 'обърни',
+    'list-tail': 'списък-остатък',
+    'memq': 'част-ра',
+    'memv': 'част-рав',
+    'member': 'част',
+    'assq': 'елемент-ра',
+    'assv': 'елемент-рав',
+    'assoc': 'елемент',
+    'list-copy': 'списък-повтори',
+
     'vector': 'вектор',
     'make-vector': 'създай-вектор',
     'vector?': 'вектор?',
     'vector-length': 'вектор-дължина',
     'vector-ref': 'вектор-вземи',
     'vector-set!': 'вектор-смени!',
+    'vector->list': 'вектор->списък',
+    'list->vector': 'списък->вектор',
+    'vector->string': 'вектор->низ',
+    'string->vector': 'низ->вектор',
+    'vector-copy': 'вектор-повтори',
+    'vector-copy!': 'вектор-повтори!',
+    'vector-append': 'вектор-добави',
+    'vector-fill!': 'вектор-попълни!',
+
     'procedure?': 'функция?',
     'call-with-current-continuation': 'извикай-със-сегашното-продължение',
     'call/cc': 'извикай/сп',
+    'write': 'напиши',
+    'write-char': 'напиши-знак',
+    'write-string': 'напиши-низ',
     'display': 'покажи',
     'newline': 'новред',
-    'append': 'добави',
     'eq?': 'ра?',
     'eqv?': 'рав?',
+    'equal?': 'равно?',
     'string?': 'низ?',
+    'char?': 'знак?',
+    'make-string': 'създай-низ',
+    'string': 'низ',
+    'string-length': 'низ-дължина',
+    'string-ref': 'низ-вземи',
+    'string-set!': 'низ-смени!',
+    'string=?': 'низ=?',
     'js-eval': 'джс-изчисли',
     'raise': 'предизвикай',
+    'apply': 'приложи',
   },
 
   'runtime-errors': {
@@ -2383,7 +2591,14 @@ var data = {
     'vector_index_out_range': 'Индексът е извън позволения обхват. Трябва да е между 0 и дължината на вектора, която е {0}.',
     'list_index_out_range': 'Индексът е извън позволения обхват. Трябва да е между 0 и дължината на списъка, която е {0}.',
     'list_index_reached_non_pair': 'Индексът е извън позволения обхват. На позиция {0} е намерена стойност, която не е двойка.',
+    'string_index_out_range': 'Индексът е извън позволения обхват. Трябва да е между 0 и дължината на низа, която е {0}.',
     'maximum_stack_size_exceeded': 'Твърде много рекурсивни извиквания без да се използват крайни извиквания.',
+    'start_index_greater_end_index': 'Началният индекс е по-голям от крайния.',
+    'vector_argument_predicate_false': 'Очаква се елементите на вектора от позиция {0} до позиция {1} да изпълняват условието {2}.',
+    'vector_copy_space_needed': 'Няма достатъчно място, за да се запишат елементите от втория вектор в първия. ' +
+      'Броят на елементите, които трябва да се запишат, е {0}, а свободното място е за {1} елемента.',
+    'improper_list': 'Подаденият списък е неправилен, той не завършва с празен списък.',
+    'improper_alist': 'Подаденият асоциативен списък е неправилен, той съдържа елементи, които не са двойки.',
   },
 };
 
@@ -2502,7 +2717,7 @@ var data = {
   },
 
   'token-errors': {
-    'invalid_token': 'Invalid token.',
+    'invalid_token': 'Invalid content.',
     'invalid_char': 'Invalid character.',
     'invalid_identifier': 'Invalid identifier.',
     'invalid_string': 'Invalid string.',
@@ -2520,8 +2735,20 @@ var data = {
     '<': '<',
     'number?': 'number?',
     'nonnegative-integer?': 'nonnegative-integer?',
+    'exp': 'exp',
+    'log': 'log',
+    'sin': 'sin',
+    'cos': 'cos',
+    'tan': 'tan',
+    'asin': 'asin',
+    'acos': 'acos',
+    'atan': 'atan',
+    'sqrt': 'sqrt',
+    'expt': 'expt',
+
     'boolean?': 'boolean?',
     'not': 'not',
+    'boolean=?': 'boolean=?',
     'list': 'list',
     'make-list': 'make-list',
     'cons': 'cons',
@@ -2530,28 +2757,63 @@ var data = {
     'cdr': 'cdr',
     'set-car!': 'set-car!',
     'set-cdr!': 'set-cdr!',
+    'caar': 'caar',
+    'cadr': 'cadr',
+    'cdar': 'cdar',
+    'cddr': 'cddr',
     'null?': 'null?',
     'list?': 'list?',
     'length': 'length',
     'list-ref': 'list-ref',
     'list-set!': 'list-set!',
+    'append': 'append',
+    'reverse': 'reverse',
+    'list-tail': 'list-tail',
+    'memq': 'memq',
+    'memv': 'memv',
+    'member': 'member',
+    'assq': 'assq',
+    'assv': 'assv',
+    'assoc': 'assoc',
+    'list-copy': 'list-copy',
+
     'vector': 'vector',
     'make-vector': 'make-vector',
     'vector?': 'vector?',
     'vector-length': 'vector-length',
     'vector-ref': 'vector-ref',
     'vector-set!': 'vector-set!',
+    'vector->list': 'vector->list',
+    'list->vector': 'list->vector',
+    'vector->string': 'vector->string',
+    'string->vector': 'string->vector',
+    'vector-copy': 'vector-copy',
+    'vector-copy!': 'vector-copy!',
+    'vector-append': 'vector-append',
+    'vector-fill!': 'vector-fill!',
+
     'procedure?': 'procedure?',
     'call-with-current-continuation': 'call-with-current-continuation',
     'call/cc': 'call/cc',
+    'write': 'write',
+    'write-char': 'write-char',
+    'write-string': 'write-string',
     'display': 'display',
     'newline': 'newline',
-    'append': 'append',
     'eq?': 'eq?',
     'eqv?': 'eqv?',
+    'equal?': 'equal?',
     'string?': 'string?',
+    'char?': 'char?',
+    'make-string': 'make-string',
+    'string': 'string',
+    'string-length': 'string-length',
+    'string-ref': 'string-ref',
+    'string-set!': 'string-set!',
+    'string=?': 'string=?',
     'js-eval': 'js-eval',
     'raise': 'raise',
+    'apply': 'apply',
   },
 
   'runtime-errors': {
@@ -2566,7 +2828,14 @@ var data = {
     'vector_index_out_range': 'Index is out of range. The length of the vector is {0}.',
     'list_index_out_range': 'Index is out of range. The length of the list is {0}.',
     'list_index_reached_non_pair': 'Index is out of range. A non-pair is reached at position {0}.',
+    'string_index_out_range': 'Index is out of range. The length of the string is {0}.',
     'maximum_stack_size_exceeded': 'Too much recursive calls with non-tail calls.',
+    'start_index_greater_end_index': 'The start index is greater than the end index.',
+    'vector_argument_predicate_false': 'Expected the elements of the vector from index {0} to {1} to satisfy predicate {2}.',
+    'vector_copy_space_needed': 'Not enough space to copy elements from the second vector to the first. ' +
+      'The amount of elements to copy is {0} and the available space is for {1} elements.',
+    'improper_list': 'The given list is improper, it does not end with the empty list.',
+    'improper_alist': 'The given association list is improper, it contains non-pair elements.',
   },
 };
 
@@ -2786,7 +3055,7 @@ so it needs a revision for r7rs correctness.
       err.column = column;
       err.toString = function() {
         return Error.prototype.toString.call(this) +
-          ' Line: ' + this.line + ', column: ' + this.column + '.';
+          ' (line: ' + this.line + ', column: ' + this.column + ')';
       };
       throw err;
     }
@@ -2859,7 +3128,7 @@ so it needs a revision for r7rs correctness.
         if (char === charTrue || char === charFalse) {
           nextChar = getNextChar();
           // TODO #true and #false are also boolean literals
-          if (!isDelimeter(nextChar)) {
+          if (nextChar && !isDelimeter(nextChar)) {
             raiseError('invalid_token');
           }
           oldchar = nextChar;
@@ -2933,7 +3202,7 @@ so it needs a revision for r7rs correctness.
           return readPeculiarIdentifier(char);
         }
       }
-      return null;
+      raiseError('invalid_token');
     }
     // A constant holding valid escaped characters in strings like \n, \r, \t.
     var validEscapedChars = get('valid_escaped_chars');
@@ -3051,7 +3320,7 @@ so it needs a revision for r7rs correctness.
     }
 
     // Checks if the character is a token and returns the token object.
-    function getTokenFromChar (char) {
+    function getTokenFromChar(char) {
       if (char === '(') {
         return createToken(TokenTypes.leftParen);
       }
@@ -3280,6 +3549,128 @@ module.exports = {
   parse: parse,
 };
 },{"./ast":2,"./common":3,"./forms/basic":6,"./forms/cond":7,"./forms/define-set":8,"./forms/do":9,"./forms/lambda":10,"./forms/let":11,"./forms/simple":13,"./lang-table":16,"./lexer":17}],19:[function(require,module,exports){
+'use strict';
+
+var common = require('../common');
+var types = require('../types');
+
+var guardArgsCountExact = common.guardArgsCountExact;
+var SchemeChar = types.SchemeChar;
+
+var charProcedures = {
+  'char?': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    return args[0] instanceof SchemeChar;
+  },
+};
+
+module.exports = charProcedures;
+},{"../common":3,"../types":26}],20:[function(require,module,exports){
+'use strict';
+
+var common = require('../common');
+var types = require('../types');
+
+var guardArgsCountExact = common.guardArgsCountExact;
+var Procedure = types.Procedure;
+var PrimitiveProcedure = types.PrimitiveProcedure;
+var Application = types.Application;
+var ContinuationProcedure = types.ContinuationProcedure;
+var Continuation = types.Continuation;
+var Symbol = types.Symbol;
+var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
+var Vector = types.Vector;
+var Pair = types.Pair;
+var EmptyList = types.EmptyList;
+var Unspecified = types.Unspecified;
+
+function haveConstructor(args, constructor) {
+  return args[0] instanceof constructor && args[1] instanceof constructor;
+}
+function isEquivalent(args, env) {
+  guardArgsCountExact(env, args.length, 2);
+  var obj1 = args[0];
+  var obj2 = args[1];
+  if (typeof obj1 === 'boolean' && typeof obj2 === 'boolean') {
+    return obj1 === obj2;
+  }
+  if (typeof obj1 === 'number' && typeof obj2 === 'number') {
+    return obj1 === obj2;
+  }
+  if (haveConstructor(args, SchemeChar)) {
+    return obj1.value === obj2.value;
+  }
+  if (haveConstructor(args, Symbol)) {
+    return obj1.value === obj2.value;
+  }
+  if (obj1 === EmptyList && obj2 === EmptyList) {
+    return true;
+  }
+  if (obj1 === Unspecified && obj2 === Unspecified) {
+    return true;
+  }
+  // TODO bytevectors, records, ports, promises
+  if (haveConstructor(args, Pair)
+    || haveConstructor(args, Vector)
+    || haveConstructor(args, SchemeString)
+    // TODO not sure for the procedures
+    || haveConstructor(args, PrimitiveProcedure)
+    || haveConstructor(args, Procedure)
+    || haveConstructor(args, ContinuationProcedure)
+    || haveConstructor(args, Continuation)
+    || haveConstructor(args, Application)) {
+    return obj1 === obj2;
+  }
+  return false;
+}
+function isEqual(args, env) {
+  guardArgsCountExact(env, args.length, 2);
+  var eqv = isEquivalent(args, env);
+  if (eqv) {
+    return true;
+  }
+  // TODO bytevectors
+  if (haveConstructor(args, Pair)) {
+    var pair1 = args[0];
+    var pair2 = args[0];
+    while (pair1 instanceof Pair && pair2 instanceof Pair) {
+      if (!isEqual([pair1.car, pair2.car], env)) {
+        return false;
+      }
+      pair1 = pair1.cdr;
+      pair2 = pair2.cdr;
+    }
+    return pair1 === EmptyList && pair2 === EmptyList;
+  }
+  if (haveConstructor(args, Vector)) {
+    var array1 = args[0].value;
+    var array2 = args[1].value;
+    if (array1.length !== array2.length) {
+      return false;
+    }
+    for (var i = 0; i < array1.length; i++) {
+      if (!isEqual([array1[i], array2[i]], env)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (haveConstructor(args, SchemeString)) {
+    return args[0].value === args[1].value;
+  }
+  return false;
+}
+var equivalenceProcedures = {
+  'eq?': isEquivalent,
+  'eqv?': isEquivalent,
+  'equal?': isEqual,
+};
+
+module.exports = equivalenceProcedures;
+},{"../common":3,"../types":26}],21:[function(require,module,exports){
+'use strict';
+
 var types = require('../types');
 var evaluator = require('../evaluator');
 var common = require('../common');
@@ -3288,24 +3679,20 @@ var stringProcedures = require('./string');
 var Environment = types.Environment;
 var Symbol = types.Symbol;
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
 var Vector = types.Vector;
 var Pair = types.Pair;
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgPredicate = common.guardArgPredicate;
+var applySchemeProcedure = evaluator.applySchemeProcedure;
 
-function applySchemeProcedure(procedure, actualArgs) {
-  var formals = procedure.args;
-  var env = new Environment(procedure.env);
-  applyArguments(formals, actualArgs, env);
-  return evaluator.evalOPs(procedure.body, env);
-}
 function convertSchemeObjectToJs(obj, env) {
   if (typeof obj === 'number'
-    || typeof obj === 'boolean'
-    || typeof obj === 'string') {
+    || typeof obj === 'boolean') {
     return obj;
   }
   if (obj instanceof SchemeString
+    || obj instanceof SchemeChar
     || obj instanceof Symbol) {
     return obj.value;
   }
@@ -3315,8 +3702,8 @@ function convertSchemeObjectToJs(obj, env) {
     });
   }
   if (obj instanceof Pair) {
-    if (isProperList(obj)) {
-      var isDict = obj.every(function (item) {
+    if (Pair.isProperList(obj)) {
+      var isDict = listToVector(obj).value.every(function (item) {
         return item instanceof Pair;
       });
       if (isDict) {
@@ -3381,6 +3768,24 @@ function convertJsObjectToScheme(obj) {
   }
   return Unspecified;
 }
+function convertSchemeDictToJsObject(dict) {
+  var obj = {};
+  var list = dict, pair;
+  while (list instanceof Pair) {
+    pair = list.car;
+    obj[pair.car.toString()] = convertSchemeObjectToJs(pair.cdr);
+    list = list.cdr;      
+  }
+  return obj;
+}
+function listToVector(list) {
+  var arr = [];
+  while (list instanceof Pair) {
+    arr.push(list.car);
+    list = list.cdr;
+  }
+  return new Vector(arr);
+}
 var ffiProcedures = {
   'js-eval': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
@@ -3390,11 +3795,13 @@ var ffiProcedures = {
   },
 };
 
-module.exports = ffiProcedures;
-},{"../common":3,"../evaluator":5,"../types":24,"./string":22}],20:[function(require,module,exports){
+exports.procedures = ffiProcedures;
+exports.convert = convertSchemeObjectToJs;
+},{"../common":3,"../evaluator":5,"../types":26,"./string":24}],22:[function(require,module,exports){
 var common = require('../common');
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
+var guardArgsCountMax = common.guardArgsCountMax;
 var raiseRuntimeError = common.raiseRuntimeError;
 
 function guardNumbers(env, args) {
@@ -3403,6 +3810,13 @@ function guardNumbers(env, args) {
       raiseRuntimeError(env, 'number_expected', [typeof args[i]]);
     }
   }
+}
+function mathFn(fn) {
+  return function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardNumbers(env, args);
+    return fn(args[0]);
+  };
 }
 var numberProcedures = {
   'number?': function (args, env) {
@@ -3489,13 +3903,50 @@ var numberProcedures = {
     }
     return true;
   },
+  'exp': mathFn(Math.exp),
+  'sin': mathFn(Math.sin),
+  'cos': mathFn(Math.cos),
+  'tan': mathFn(Math.tan),
+  'asin': mathFn(Math.asin),
+  'acos': mathFn(Math.acos),
+  'log': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardNumbers(env, args);
+    if (args.length === 1) {
+      return Math.log(args[0]);
+    }
+    else { // args.length === 2
+      return Math.log(args[0]) / Math.log(args[1]);
+    }
+  },
+  'atan': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardNumbers(env, args);
+    if (args.length === 1) {
+      return Math.atan(args[0]);
+    }
+    else { // args.length === 2
+      return Math.atan2(args[0], args[1]);
+    }
+  },
+  'sqrt': mathFn(Math.sqrt),
+  'expt': function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    guardNumbers(env, args);
+    return Math.pow(args[0], args[1]);
+  },
 };
 
 module.exports = numberProcedures;
-},{"../common":3}],21:[function(require,module,exports){
+},{"../common":3}],23:[function(require,module,exports){
+'use strict';
+
 var common = require('../common');
 var types = require('../types');
 var numberProcedures = require('./number');
+var equivalenceProcedures = require('./equivalence');
 
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
@@ -3508,6 +3959,65 @@ var Pair = types.Pair;
 var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 
+var isEq = equivalenceProcedures['eq?'];
+var isEqv = equivalenceProcedures['eqv?'];
+var isEqual = equivalenceProcedures['equal?'];
+
+function car(args, env) {
+  guardArgsCountExact(env, args.length, 1);
+  guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+  return args[0].car;
+}
+function cdr(args, env) {
+  guardArgsCountExact(env, args.length, 1);
+  guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+  return args[0].cdr;
+}
+function findMember(compare) {
+  return function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    guardArgPredicate(env, args[1], pairListProcedures['pair?'], 1, 'procedures', 'pair?');
+    var obj = args[0];
+    var pair = args[1];
+    while (pair instanceof Pair) {
+      if (compare([pair.car, obj], env)) {
+        return pair;
+      }
+      pair = pair.cdr;
+    }
+    if (pair === EmptyList) {
+      return false;
+    }
+    else {
+      raiseRuntimeError(env, 'improper_list');
+    }
+  };
+}
+function findPair(compare) {
+  return function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    guardArgPredicate(env, args[1], pairListProcedures['pair?'], 1, 'procedures', 'pair?');
+    var obj = args[0];
+    var pair = args[1];
+    var element;
+    while (pair instanceof Pair) {
+      element = pair.car;
+      if (!pairListProcedures['pair?']([element], env)) {
+        raiseRuntimeError(env, 'improper_alist');
+      }
+      if (compare([element.car, obj], env)) {
+        return element;
+      }
+      pair = pair.cdr;
+    }
+    if (pair === EmptyList) {
+      return false;
+    }
+    else {
+      raiseRuntimeError(env, 'improper_list');
+    }
+  };
+}
 var pairListProcedures = {
   'cons': function (args, env) {
     guardArgsCountExact(env, args.length, 2);
@@ -3517,16 +4027,8 @@ var pairListProcedures = {
     guardArgsCountExact(env, args.length, 1);
     return args[0] instanceof Pair;
   },
-  'car': function (args, env) {
-    guardArgsCountExact(env, args.length, 1);
-    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
-    return args[0].car;
-  },
-  'cdr': function (args, env) {
-    guardArgsCountExact(env, args.length, 1);
-    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
-    return args[0].cdr;
-  },
+  'car': car,
+  'cdr': cdr,
   'set-car!': function (args, env) {
     guardArgsCountExact(env, args.length, 2);
     guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
@@ -3540,6 +4042,18 @@ var pairListProcedures = {
     guardImmutable(env, args[0]);
     args[0].cdr = args[1];
     return Unspecified;
+  },
+  'caar': function (args, env) {
+    return car([car(args, env)], env);
+  },
+  'cadr': function (args, env) {
+    return car([cdr(args, env)], env);
+  },
+  'cdar': function (args, env) {
+    return cdr([car(args, env)], env);
+  },
+  'cddr': function (args, env) {
+    return cdr([cdr(args, env)], env);
   },
   'null?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
@@ -3567,7 +4081,7 @@ var pairListProcedures = {
   'length': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     var list = args[0];
-    if (args === EmptyList) {
+    if (list === EmptyList) {
       return 0;
     }
     var length = 0;
@@ -3659,38 +4173,223 @@ var pairListProcedures = {
       pair.cdr = last;
     }
     return first || last;
-  },  
+  },
+  'reverse': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var list = args[0];
+    if (list === EmptyList) {
+      return EmptyList;
+    }
+    var newList = EmptyList;
+    while (list instanceof Pair) {
+      newList = new Pair(list.car, newList);
+      list = list.cdr;      
+    }
+    if (list === EmptyList) {
+      return newList;
+    }
+    else {
+      raiseRuntimeError(env, 'argument_predicate_false', [0, 'list?']);
+    }
+  },
+  'list-tail': function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    var k = args[1];
+    guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
+    guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    var pair = args[0];
+    var idx = 0;
+    while (pair instanceof Pair && idx < k) {
+      idx += 1;
+      pair = pair.cdr;
+    }
+    if (idx === k && pair instanceof Pair) {
+      return pair;
+    }
+    else {
+      var errorMessage = pair === EmptyList ? 'list_index_out_range' : 'list_index_reached_non_pair';
+      raiseRuntimeError(env, errorMessage, [idx]);
+    }
+  },
+  'memq': findMember(equivalenceProcedures['eq?']),
+  'memv': findMember(equivalenceProcedures['eqv?']),
+  'member': findMember(equivalenceProcedures['equal?']), // TODO implement (member obj list compare)
+  'assq': findPair(equivalenceProcedures['eq?']),
+  'assv': findPair(equivalenceProcedures['eqv?']),
+  'assoc': findPair(equivalenceProcedures['equal?']), // TODO implement (assoc obj alist compare)
+  'list-copy': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var obj = args[0];
+    if (!(obj instanceof Pair)) {
+      return obj;
+    }
+    var pair, nextPair, list;
+    list = pair = nextPair = new Pair(obj.car, obj.cdr);
+    obj = obj.cdr;
+    while (obj instanceof Pair) {
+      nextPair = new Pair(obj.car, obj.cdr);
+      if (pair) {
+        pair.cdr = nextPair;
+      }
+      pair = nextPair;
+      obj = obj.cdr;
+    }
+    return list;
+  },
 };
 
 module.exports = pairListProcedures;
-},{"../common":3,"../types":24,"./number":20}],22:[function(require,module,exports){
+},{"../common":3,"../types":26,"./equivalence":20,"./number":22}],24:[function(require,module,exports){
+'use strict';
+
 var common = require('../common');
 var types = require('../types');
+var numberProcedures = require('./number');
+var charProcedures = require('./char');
 
 var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
+var Unspecified = types.Unspecified;
 var guardArgsCountExact = common.guardArgsCountExact;
+var guardArgsCountMin = common.guardArgsCountMin;
+var guardArgsCountMax = common.guardArgsCountMax;
+var guardArgPredicate = common.guardArgPredicate;
+var guardImmutable = common.guardImmutable;
 
 var stringProcedures = {
   'string?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return args[0] instanceof SchemeString;
   },
+  'make-string': function (args, env) {
+    guardArgsCountMin(env, args.length, 1);
+    guardArgsCountMax(env, args.length, 2);
+    guardArgPredicate(env, args[0], numberProcedures['nonnegative-integer?'], 0, 'procedures', 'nonnegative-integer?');
+    var fill = '\x00';
+    if (args.length === 2) {
+      guardArgPredicate(env, args[1], charProcedures['char?'], 1, 'procedures', 'char?');
+      fill = args[1].value;
+    }
+    var arr = new Array(args[0]);
+    for (var i = 0; i < arr.length; i++) {
+      arr[i] = fill;
+    }
+    return new SchemeString(arr.join(''));
+  },
+  'string': function (args, env) {
+    for (var i = 0; i < args.length; i++) {
+      guardArgPredicate(env, args[i], charProcedures['char?'], i, 'procedures', 'char?');
+    }
+    var arr = new Array(args.length);
+    for (var i = 0; i < arr.length; i++) {
+      arr[i] = args[i].value;
+    }
+    return new SchemeString(arr.join(''));
+  },
+  'string-length': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
+    return args[0].value.length;
+  },
+  'string-ref': function (args, env) {
+    guardArgsCountExact(env, args.length, 2);
+    var k = args[1];
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
+    guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    var str = args[0].value;
+    if (k > str.length - 1) {
+      raiseRuntimeError(env, 'string_index_out_range', [str.length]);
+    }
+    return new SchemeChar(str[k]);
+  },
+  'string-set!': function (args, env) {
+    guardArgsCountExact(env, args.length, 3);
+    var k = args[1];
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
+    guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    guardArgPredicate(env, args[2], charProcedures['char?'], 2, 'procedures', 'char?');
+    guardImmutable(env, args[0]);
+    var str = args[0].value;
+    if (k > str.length - 1) {
+      raiseRuntimeError(env, 'string_index_out_range', [str.length]);
+    }
+    args[0].value = str.substring(0, k) + args[2].value + str.substring(k + 1);
+    return Unspecified;
+  },
+  'string=?': function (args, env) {
+    guardArgsCountMin(env, args.length, 2);
+    for (var i = 0; i < args.length; i++) {
+      guardArgPredicate(env, args[i], stringProcedures['string?'], i, 'procedures', 'string?');
+    }
+    for (var i = 0, l = args.length - 1; i < l; i++) {
+      if (args[i].value !== args[i + 1].value) {
+        return false;
+      }
+    }
+    return true;
+  },
 };
 
 module.exports = stringProcedures;
-},{"../common":3,"../types":24}],23:[function(require,module,exports){
+},{"../common":3,"../types":26,"./char":19,"./number":22}],25:[function(require,module,exports){
 var common = require('../common');
 var types = require('../types');
-var Vector = types.Vector;
-var Unspecified = types.Unspecified;
+var langTable = require('../lang-table');
+var charProcedures = require('./char');
+var stringProcedures = require('./string');
 var numberProcedures = require('./number');
+
+var Vector = types.Vector;
+var Pair = types.Pair;
+var EmptyList = types.EmptyList;
+var SchemeString = types.SchemeString;
+var SchemeChar = types.SchemeChar;
+var Unspecified = types.Unspecified;
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
 var guardArgsCountMax = common.guardArgsCountMax;
 var guardArgPredicate = common.guardArgPredicate;
 var guardImmutable = common.guardImmutable;
 var raiseRuntimeError = common.raiseRuntimeError;
+var langName = common.langName;
 
+function getCopyVectorArgs(args, env, firstArgPredicate, firstArgPredicateName) {
+  guardArgsCountMin(env, args.length, 1);
+  guardArgsCountMax(env, args.length, 3);
+  guardArgPredicate(env, args[0], firstArgPredicate, 0, 'procedures', firstArgPredicateName);
+  var arr = args[0].value;
+  var start = 0;
+  var end = arr.length;
+  if (args.length >= 2) {
+    guardArgPredicate(env, args[1], numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    start = args[1];
+  }
+  if (args.length === 3) {
+    guardArgPredicate(env, args[2], numberProcedures['nonnegative-integer?'], 2, 'procedures', 'nonnegative-integer?');
+    end = args[2];
+  }
+  if (start > arr.length - 1) {
+    raiseRuntimeError(env, 'vector_index_out_range', [arr.length]);
+  }
+  if (end > arr.length) {
+    raiseRuntimeError(env, 'vector_index_out_range', [arr.length]);
+  }
+  if (start > end) {
+    raiseRuntimeError(env, 'start_index_greater_end_index');
+  }
+  return {
+    arr: arr,
+    start: start,
+    end: end,
+  };
+}
+function guardVectorContentPredicate(env, arg, predicate, startIndex, endIndex, predicateCat, predicateKey) {
+  if (!predicate([arg], env)) {
+    var lang = env.getVar(langName);
+    var predicateName = langTable.get(lang, predicateCat, predicateKey);
+    raiseRuntimeError(env, 'vector_argument_predicate_false', [startIndex, endIndex, predicateName]);
+  }
+}
 var vectorProcedures = {
   'vector': Vector.create,
   'make-vector': function (args, env) {
@@ -3705,7 +4404,7 @@ var vectorProcedures = {
     for (var i = 0; i < arr.length; i++) {
       arr[i] = fill;
     }
-    return Vector.create(arr, env);
+    return new Vector(arr);
   },
   'vector?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
@@ -3740,10 +4439,153 @@ var vectorProcedures = {
     arr[k] = args[2];
     return Unspecified;
   },
+  'vector->list': function (args, env) {
+    var params = getCopyVectorArgs(args, env, vectorProcedures['vector?'], 'vector?');
+    return Pair.createList(params.arr.slice(params.start, params.end));
+  },
+  'list->vector': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var list = args[0];
+    if (args === EmptyList) {
+      return new Vector([]);
+    }
+    var arr = [];
+    while (list instanceof Pair) {
+      arr.push(list.car);
+      list = list.cdr;      
+    }
+    if (list === EmptyList) {
+      return new Vector(arr);
+    }
+    else {
+      raiseRuntimeError(env, 'argument_predicate_false', [0, 'list?']);
+    }
+  },
+  'vector->string': function (args, env) {
+    var params = getCopyVectorArgs(args, env, vectorProcedures['vector?'], 'vector?');
+    var arr = params.arr;
+    var start = params.start;
+    var end = params.end;
+    var strArr = new Array(end - start);
+    var char;
+    for (var i = start, j = 0; i < end; i++, j++) {
+      char = arr[i];
+      guardVectorContentPredicate(env, char, charProcedures['char?'], start, end, 'procedures', 'char?');
+      strArr[j] = char.value;
+    }
+    return new SchemeString(strArr.join(''));
+  },
+  'string->vector': function (args, env) {
+    var params = getCopyVectorArgs(args, env, stringProcedures['string?'], 'string?');
+    var charArray = params.arr.split('').map(function (char) {
+      return new SchemeChar(char);
+    });
+    return new Vector(charArray.slice(params.start, params.end));
+  },
+  'vector-copy': function (args, env) {
+    var params = getCopyVectorArgs(args, env, vectorProcedures['vector?'], 'vector?');
+    return new Vector(params.arr.slice(params.start, params.end));
+  },
+  'vector-copy!': function (args, env) {
+    guardArgsCountMin(env, args.length, 3);
+    guardArgsCountMax(env, args.length, 5);
+    guardArgPredicate(env, args[0], vectorProcedures['vector?'], 0, 'procedures', 'vector?');
+    guardImmutable(env, args[0]);
+    guardArgPredicate(env, args[1], numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    guardArgPredicate(env, args[2], vectorProcedures['vector?'], 2, 'procedures', 'vector?');
+    var to = args[0].value;
+    var at = args[1]
+    var from = args[2].value;
+    var start = 0;
+    var end = from.length;
+    if (args.length >= 4) {
+      guardArgPredicate(env, args[3], numberProcedures['nonnegative-integer?'], 3, 'procedures', 'nonnegative-integer?');
+      start = args[3];
+    }
+    if (args.length === 5) {
+      guardArgPredicate(env, args[4], numberProcedures['nonnegative-integer?'], 4, 'procedures', 'nonnegative-integer?');
+      end = args[4];
+    }
+    if (at > to.length - 1) {
+      raiseRuntimeError(env, 'vector_index_out_range', [at.length]);
+    }
+    if (start > from.length - 1) {
+      raiseRuntimeError(env, 'vector_index_out_range', [from.length]);
+    }
+    if (end > from.length) {
+      raiseRuntimeError(env, 'vector_index_out_range', [from.length]);
+    }
+    if (start > end) {
+      raiseRuntimeError(env, 'start_index_greater_end_index');
+    }
+    if (to.length - at < end -start) {
+      raiseRuntimeError(env, 'vector_copy_space_needed', [end - start, to.length - at]);
+    }
+    if (to === from && at === start) {
+      return;
+    }
+    if (at < start) {
+      for (var i = start, j = at; i < end; i++, j++) {
+        to[j] = from[i];
+      }
+    }
+    else { // at >= start
+      for (var i = end - 1, j = at + end - start - 1; i >= start; i--, j--) {
+        to[j] = from[i];
+      }
+    }
+    return Unspecified;
+  },
+  'vector-append': function (args, env) {
+    var totalLength = 0, i, j, k, argArr;
+    for (i = 0; i < args.length; i++) {
+      guardArgPredicate(env, args[i], vectorProcedures['vector?'], i, 'procedures', 'vector?');
+      totalLength += args[i].value.length;
+    }
+    var arr = new Array(totalLength);
+    for (i = 0, k = 0; i < args.length; i++) {
+      argArr = args[i].value;
+      for (j = 0; j < argArr.length; j++, k++) {
+        arr[k] = argArr[j];
+      }
+    }
+    return new Vector(arr);
+  },
+  'vector-fill!': function (args, env) {
+    guardArgsCountMin(env, args.length, 2);
+    guardArgsCountMax(env, args.length, 4);
+    guardArgPredicate(env, args[0], vectorProcedures['vector?'], 0, 'procedures', 'vector?');
+    guardImmutable(env, args[0]);
+    var arr = args[0].value;
+    var fill = args[1];
+    var start = 0;
+    var end = arr.length;
+    if (args.length >= 3) {
+      guardArgPredicate(env, args[2], numberProcedures['nonnegative-integer?'], 2, 'procedures', 'nonnegative-integer?');
+      start = args[2];
+    }
+    if (args.length === 4) {
+      guardArgPredicate(env, args[3], numberProcedures['nonnegative-integer?'], 3, 'procedures', 'nonnegative-integer?');
+      end = args[3];
+    }
+    if (start > arr.length - 1) {
+      raiseRuntimeError(env, 'vector_index_out_range', [arr.length]);
+    }
+    if (end > arr.length) {
+      raiseRuntimeError(env, 'vector_index_out_range', [arr.length]);
+    }
+    if (start > end) {
+      raiseRuntimeError(env, 'start_index_greater_end_index');
+    }
+    for (var i = start; i < end; i++) {
+      arr[i] = fill;
+    }
+    return Unspecified;
+  },
 };
 
 module.exports = vectorProcedures;
-},{"../common":3,"../types":24,"./number":20}],24:[function(require,module,exports){
+},{"../common":3,"../lang-table":16,"../types":26,"./char":19,"./number":22,"./string":24}],26:[function(require,module,exports){
 var common = require('./common');
 var guardArgsCountExact = common.guardArgsCountExact;
 var cloneEnvs = common.cloneEnvs;
@@ -3756,7 +4598,7 @@ function Environment(parent) {
   this.expressionStack = [];
   this.opIndex = 0;
   this.ops = null;
-  this.calledProcedure = null;
+  this.procedure = null;
 }
 Environment.prototype.addVar = function addVar(name, value) {
   var idx = this.varNames.indexOf(name);
@@ -3836,6 +4678,9 @@ PrimitiveProcedure.prototype.execute = function execute(args, env) {
 PrimitiveProcedure.prototype.toString = function toString() {
   return '#<procedure ' + this.name + '>';
 };
+function Application(name) {
+  this.name = name || '';
+}
 function ContinuationProcedure(fn, name) {
   this.fn = fn;
   this.name = name || '';
@@ -3872,7 +4717,27 @@ SchemeString.prototype.valueOf = function valueOf() {
   return this.value;
 };
 SchemeString.prototype.toString = function toString() {
-  return '"' + this.value + '"';
+  // TODO translate nrt to the current language
+  var value = this.value.replace(/[\t\n\r]/g, function (txt) {
+    switch (txt) {
+      case '\t':
+        return '\\t';
+      case '\n':
+        return '\\n';
+      case '\r':
+        return '\\r';
+    }
+  });
+  return '"' + value + '"';
+};
+function SchemeChar(value) {
+  this.value = value;
+}
+SchemeChar.prototype.valueOf = function valueOf() {
+  return this.value;
+};
+SchemeChar.prototype.toString = function toString() {
+  return '#\\' + this.value;
 };
 function Vector(items, immutable) {
   this.value = null;
@@ -3942,11 +4807,11 @@ Unspecified.toString = function toString() {
   return '';
 };
 function SchemeError(message) {
-  this.message = message || 'Error';
+  this.message = message || '';
   this.stack = null;
 }
 SchemeError.prototype.toString = function toString() {
-  var res = '';
+  var res = 'Error: '; // TODO localize
   if (this.message) {
     res += this.message + '\n';
   }
@@ -3959,10 +4824,12 @@ module.exports = {
   OutputPort: OutputPort,
   Procedure: Procedure,
   PrimitiveProcedure: PrimitiveProcedure,
+  Application: Application,
   ContinuationProcedure: ContinuationProcedure,
   Continuation: Continuation,
   Symbol: Symbol,
   SchemeString: SchemeString,
+  SchemeChar: SchemeChar,
   Vector: Vector,
   Pair: Pair,
   EmptyList: EmptyList,

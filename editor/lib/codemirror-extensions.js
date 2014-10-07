@@ -53,19 +53,29 @@ function DescWidget(cm, hintsWidget) {
     desc.style.top = (elBox.top - borderTopWidth) + 'px';
   };
   this.show = function (text) {
-    text = signatures[text] || text;
-    text = text.replace(/\n\r|\n|\r|\t/g, function (match) {
-      switch (match) {
-        case '\n\r':
-        case '\n':
-        case '\r':
-          return '<br />';
-        case '\t':
-          return '&nbsp;&nbsp;&nbsp;&nbsp;';
+    if (!text) {
+      desc.style.display = 'none';
+      desc.innerHTML = '';
+      return;
+    }
+    else {
+      if (desc.style.display === 'none') {
+        desc.style.display = 'block';
       }
-      return '';
-    });
-    desc.innerHTML = text;
+      text = signatures[text] || text;
+      text = text.replace(/\n\r|\n|\r|\t/g, function (match) {
+        switch (match) {
+          case '\n\r':
+          case '\n':
+          case '\r':
+            return '<br />';
+          case '\t':
+            return '&nbsp;&nbsp;&nbsp;&nbsp;';
+        }
+        return '';
+      });
+      desc.innerHTML = text;
+    }
   };
   this.close = function () {
     desc.parentNode.removeChild(desc);
@@ -107,6 +117,9 @@ CodeMirror.hint.scheme = function(cm) {
     }
   });
   CodeMirror.on(inner, 'select', function (word, element) {
+    if (!signatures[word]) {
+      word = '';
+    }
     if (descWidget) {
       descWidget.show(word);
       descWidget.move(element);
@@ -222,37 +235,37 @@ CodeMirror.hint.scheme = function(cm) {
     var target = e.target || e.srcElement;
     showTooltipFor(cm, e, annotationTooltip(word), target, pos);
   }
-  var nearby = [0, 0, 0, 5, 0, -5, 5, 0, -5, 0];
   function onMouseOver(cm, e) {
     var node = e.target || e.srcElement;
-    if (!/\bcm-builtin/.test(node.className)) return;
-    for (var i = 0; i < nearby.length; i += 2) {
-      var pos = cm.coordsChar({
-        left: e.clientX + nearby[i],
-        top: e.clientY + nearby[i + 1]
-      }, "client");
-      var token = cm.getTokenAt(pos);
-      if (token && (token.type === 'builtin'
-        || token.type === 'variable' || token.type === 'string')) {
-        var word = token.string;
-        if (keywords.indexOf(word) !== -1) {
-          var cancelTooltip = function () {
-            CodeMirror.off(node, "mousemove", moveTooltip);
-            CodeMirror.off(node, "mouseout", cancelTooltip);
-            clearTimeout(displayTooltip);
-          }
-          var displayTooltip = setTimeout(function () {
-            CodeMirror.off(node, "mousemove", moveTooltip);
-            CodeMirror.off(node, "mouseout", cancelTooltip);
-            popupSpanTooltip(cm, word, e, pos);
-          }, 500)
-          CodeMirror.on(node, "mouseout", cancelTooltip);
-          var moveTooltip = function (me) {
-            e = me;
-          }
-          CodeMirror.on(node, "mousemove", moveTooltip);
-          return //popupSpanTooltip(cm, word, e, pos);
+    if (!/\bcm-builtin/.test(node.className)) {
+      return;
+    }
+
+    var box = node.getBoundingClientRect();
+    var x = (box.left + box.right) / 2;
+    var y = (box.top + box.bottom) / 2;
+    var pos = cm.coordsChar({left: x, top: y}, "client");
+    var token = cm.getTokenAt(pos);
+    if (token && (token.type === 'builtin'
+      || token.type === 'variable' || token.type === 'string')) {
+      var word = token.string;
+      if (keywords.indexOf(word) !== -1) {
+        var cancelTooltip = function () {
+          CodeMirror.off(node, "mousemove", moveTooltip);
+          CodeMirror.off(node, "mouseout", cancelTooltip);
+          clearTimeout(displayTooltip);
         }
+        var displayTooltip = setTimeout(function () {
+          CodeMirror.off(node, "mousemove", moveTooltip);
+          CodeMirror.off(node, "mouseout", cancelTooltip);
+          popupSpanTooltip(cm, word, e, pos);
+        }, 500)
+        CodeMirror.on(node, "mouseout", cancelTooltip);
+        var moveTooltip = function (me) {
+          e = me;
+        }
+        CodeMirror.on(node, "mousemove", moveTooltip);
+        return //popupSpanTooltip(cm, word, e, pos);
       }
     }
   }

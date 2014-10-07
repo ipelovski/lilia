@@ -16,9 +16,9 @@ function setKeywords(lang) {
 function runSchemeAndPrint(input) {
   var result;
   try {
-    result = evaluate(input);
+    result = session.evaluate(input);
     if (result !== null || result !== undefined) {
-      if (result.stack) {
+      if (result.valueOf().stack) {
         consoleError(result.toString());
       }
       else {
@@ -55,7 +55,7 @@ var customConsole = customConsoleElement.console({
   animateScroll: true,
   promptHistory: true,
   fadeOnReset: false,
-  welcomeMessage: 'Enter some Scheme expressions to evaluate. You can use Tab for autocomplete.',
+  //welcomeMessage: 'Enter some Scheme expressions to evaluate. You can use Tab for autocomplete.',
   cols: 90,
   completeHandle: function (input) {
     var match = input.match(consoleRegex);
@@ -158,7 +158,7 @@ var codeEditor = CodeMirror.fromTextArea(document.getElementById('editor'), {
 });
 codeEditor.setSize(800, 400);
 codeEditor.on('cursorActivity', showCursorPosition);
-codeEditor.setValue(';start here, use Ctrl + Space or Tab for autocomplete\n');
+codeEditor.setValue('');
 codeEditor.setCursor(1, 0);
 
 var signatures = {
@@ -182,8 +182,14 @@ lilia.setOutputPortHandler(function (data) {
     customConsole.message(line);
   }
 });
-var evaluate = lilia.initEval('en');
-setKeywords('en');
+var editorLang; // the human language used for the evaluator
+var session; // the evaluation session
+function init(lang) {
+  editorLang = lang;
+  session = lilia.session(lang);
+  setKeywords(lang);
+}
+init('en');
 
 function runScheme() {
   var input = codeEditor.getValue();
@@ -193,12 +199,10 @@ function runScheme() {
 }
 document.getElementById('button-run').addEventListener('click', runScheme);
 document.getElementById('en-en-lang').addEventListener('click', function() {
-  evaluate = lilia.initEval('en');
-  setKeywords('en');
+  init('en');
 });
 document.getElementById('bg-bg-lang').addEventListener('click', function() {
-  evaluate = lilia.initEval('bg');
-  setKeywords('bg');
+  init('bg');
 });
 document.getElementById('button-clear').addEventListener('click', function () {
   customConsole.reset();

@@ -18,7 +18,8 @@ var numberProcedures = require('./procedures/number');
 var pairListProcedures = require('./procedures/pair-list');
 var vectorProcedures = require('./procedures/vector');
 var stringProcedures = require('./procedures/string');
-var ffiProcedures = require('./procedures/ffi');
+var charProcedures = require('./procedures/char');
+var ffi = require('./procedures/ffi');
 
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
@@ -46,6 +47,9 @@ var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 var SchemeError = types.SchemeError;
 
+var ffiProcedures = ffi.procedures;
+var convert = ffi.convert;
+
 var outputPort;
 function setOutputPortHandler(fn) {
   outputPort = new OutputPort(fn);
@@ -56,6 +60,12 @@ function isProcedure(arg) {
   return procedureTypes.some(function (type) {
     return arg instanceof type;
   });
+}
+function objectToString(obj, lang) {
+  if (typeof obj === 'boolean') {
+    return '#' + langTable.get(lang, 'tokens', obj.toString());
+  }
+  return obj.toString();
 }
 var primitiveFunctions = {  
   'boolean?': function (args, env) {
@@ -83,10 +93,41 @@ var primitiveFunctions = {
     guardArgsCountExact(env, args.length, 1);
     return isProcedure(args[0]);
   },
+  'write-string': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
+    if (outputPort) {
+      outputPort.emit(args[0].value);
+    }
+    return Unspecified;
+  },
+  'write-char': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    guardArgPredicate(env, args[0], charProcedures['char?'], 0, 'procedures', 'char?');
+    if (outputPort) {
+      outputPort.emit(args[0].value);
+    }
+    return Unspecified;
+  },
+  'write': function (args, env) {
+    guardArgsCountExact(env, args.length, 1);
+    var obj = args[0];    
+    if (outputPort) {
+      outputPort.emit(objectToString(obj, env.getVar(langName)));
+    }
+    return Unspecified;
+  },
   'display': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
+    var obj = args[0];
+    if (obj instanceof SchemeChar) {
+      return primitiveFunctions['write-char'](args, env);
+    }
+    if (obj instanceof SchemeString) {
+      return primitiveFunctions['write-string'](args, env);
+    }
     if (outputPort) {
-      outputPort.emit(args[0].toString());
+      outputPort.emit(objectToString(obj, env.getVar(langName)));
     }
     return Unspecified;
   },
@@ -117,6 +158,7 @@ function addPrimitivesAndLang(env, lang) {
   addProceduers(env, lang, pairListProcedures);
   addProceduers(env, lang, vectorProcedures);
   addProceduers(env, lang, stringProcedures);
+  addProceduers(env, lang, charProcedures);
   addProceduers(env, lang, ffiProcedures);
   addApplication(env, lang);
   addContinuationProcedures(env, lang);
@@ -508,6 +550,19 @@ function evalOPs(ops, env) {
   return env.expressionStack.pop();
 }
 
+function Result(object, env) {
+  this.object = object;
+  this.env = env;
+}
+Result.prototype.valueOf = function valueOf() {
+  return this.object;
+};
+Result.prototype.toString = function toString() {
+  return objectToString(this.object, this.env);
+};
+Result.prototype.toJS = function toJS() {
+  return convert(this.object, this.env);
+};
 function evaluate(text, lang) {
   lang = lang || 'en';
   try {
@@ -518,19 +573,25 @@ function evaluate(text, lang) {
   }
   var env = new Environment();
   addPrimitivesAndLang(env, lang);
-  return evalOPs(program, env);
+  var result = evalOPs(program, env);
+  return new Result(result, env);
 }
-function initEval(lang) {
+function session(lang) {
   lang = lang || 'en';
   var env = new Environment();
   addPrimitivesAndLang(env, lang);
-  return function evalFragment(text) {
-    var fragment = compiler.compile(text, lang);
-    return evalOPs(fragment, env);
+  return {
+    environment: env,
+    evaluate: function evalFragment(text) {
+      var fragment = compiler.compile(text, lang);
+      var result = evalOPs(fragment, env);
+      return new Result(result, env);
+    },
   };
 }
 
 exports.applySchemeProcedure = applySchemeProcedure;
 exports.evaluate = evaluate;
-exports.initEval = initEval;
+exports.session = session;
 exports.setOutputPortHandler = setOutputPortHandler;
+exports.string = toString;

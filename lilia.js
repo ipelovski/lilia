@@ -6,8 +6,9 @@ var evaluator = require('./src/evaluator');
 if (typeof window !== 'undefined'){
   window.lilia = {
     evaluate: evaluator.evaluate,
-    initEval: evaluator.initEval,
+    session: evaluator.session,
     setOutputPortHandler: evaluator.setOutputPortHandler,
+    string: evaluator.string,
     'lang-en': langEn,
     'lang-bg': langBg,
   }
