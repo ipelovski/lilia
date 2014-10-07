@@ -12,7 +12,8 @@
   "use strict";
 
   // ip changes
-  var WORD = /[\wа-яА-Я$]+/, RANGE = 500;
+  var WORD = /[\wа-яА-Я\$_\-!$%&*+\.\/:<=>?@\^~]+/,///[\wа-яА-Я$]+/,
+    RANGE = 500;
 
   CodeMirror.registerHelper("hint", "anyword", function(editor, options) {
     var word = options && options.word || WORD;

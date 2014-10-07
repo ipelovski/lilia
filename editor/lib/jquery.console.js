@@ -788,24 +788,12 @@
   };
   // Simple utility for printing messages
   $.fn.filledText = function(txt) {
-    $(this).text(txt);
     // ip changes
-    var html = $(this)
-      .html()
-      .replace(/\n\r|\n|\r| |\t/g, function (match) {
-        switch (match) {
-          case '\n\r':
-          case '\n':
-          case '\r':
-            return '<br />';
-          case ' ':
-            return '&nbsp;';
-          case '\t':
-            return '&nbsp;&nbsp;&nbsp;&nbsp;';
-        }
-        return '';
-      });
+    var html = '<pre>' + txt + '</pre>';
     $(this).html(html);
+    $(this).find('a').click(function (e) {
+      e.stopPropagation();
+    });
     return this;
   };
 
