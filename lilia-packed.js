@@ -694,9 +694,9 @@ function isProcedure(arg) {
     return arg instanceof type;
   });
 }
-function objectToString(obj, lang) {
+function objectToString(obj, env) {
   if (typeof obj === 'boolean') {
-    return '#' + langTable.get(lang, 'tokens', obj.toString());
+    return '#' + langTable.get(env.getVar(langName), 'tokens', obj.toString());
   }
   return obj.toString();
 }
@@ -746,7 +746,7 @@ var primitiveFunctions = {
     guardArgsCountExact(env, args.length, 1);
     var obj = args[0];    
     if (outputPort) {
-      outputPort.emit(objectToString(obj, env.getVar(langName)));
+      outputPort.emit(objectToString(obj, env));
     }
     return Unspecified;
   },
@@ -760,7 +760,7 @@ var primitiveFunctions = {
       return primitiveFunctions['write-string'](args, env);
     }
     if (outputPort) {
-      outputPort.emit(objectToString(obj, env.getVar(langName)));
+      outputPort.emit(objectToString(obj, env));
     }
     return Unspecified;
   },
