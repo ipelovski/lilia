@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>Call with current continuation</title>
+  <script type="text/javascript" src="/lilia-packed.js"></script>
+</head>
+<body>
+  <p>
+    View the source of the page and check the browser console for the result of the code.
+  </p>
+  <pre>
+    ; Code by Matthew Might
+    ; source: http://matt.might.net/articles/programming-with-continuations--exceptions-backtracking-search-threads-generators-coroutines/
+
+    ; thread-queue : list[continuation]
+    (define thread-queue '())
+
+    ; halt : continuation
+    (define halt #f)
+
+    ; void : -> void
+    (define (void) (if #f 1))
+
+    ; current-continuation : -> continuation
+    (define (current-continuation)
+      (call-with-current-continuation
+       (lambda (cc)
+         (cc cc))))
+
+    ; spawn : (-> anything) -> void
+    (define (spawn thunk)
+      (let ((cc (current-continuation)))
+        (if (procedure? cc)
+            (set! thread-queue (append thread-queue (list cc)))
+            (begin (thunk)
+                   (quit)))))
+
+    ; yield : value -> void
+    (define (yield)
+      (let ((cc (current-continuation)))
+        (if (and (procedure? cc) (pair? thread-queue))
+            (let ((next-thread (car thread-queue)))
+              (set! thread-queue (append (cdr thread-queue) (list cc)))
+              (next-thread 'resume))
+            (void))))
+
+    ; quit : -> ...
+    (define (quit)
+      (if (pair? thread-queue)
+          (let ((next-thread (car thread-queue)))
+            (set! thread-queue (cdr thread-queue))
+            (next-thread 'resume))
+          (halt)))
+       
+    ; start-threads : -> ...
+    (define (start-threads)
+      (let ((cc (current-continuation)))
+        (if cc
+            (begin
+              (set! halt (lambda () (cc #f)))
+              (if (null? thread-queue)
+                  (void)
+                  (begin
+                    (let ((next-thread (car thread-queue)))
+                      (set! thread-queue (cdr thread-queue))
+                      (next-thread 'resume)))))
+            (void))))
+
+
+
+
+    ;; Example cooperatively threaded program
+    (define counter 10)
+
+    (define (make-thread-thunk name)
+      (letrec ((loop (lambda ()
+                       (if (< counter 0)
+                           (quit) #f)
+                       (display "in thread ")
+                       (display name)
+                       (display "; counter = ")
+                       (display counter)
+                       (newline)
+                       (set! counter (- counter 1))
+                       (yield)
+                       (loop))))
+        loop))
+
+    (spawn (make-thread-thunk 'a))
+    (spawn (make-thread-thunk 'b))
+    (spawn (make-thread-thunk 'c))
+
+    (start-threads)    
+  </pre>
+  <script type="text/lilia">
+    ; Code by Matthew Might
+    ; source: http://matt.might.net/articles/programming-with-continuations--exceptions-backtracking-search-threads-generators-coroutines/
+
+    ; thread-queue : list[continuation]
+    (define thread-queue '())
+
+    ; halt : continuation
+    (define halt #f)
+
+    ; void : -> void
+    (define (void) (if #f 1))
+
+    ; current-continuation : -> continuation
+    (define (current-continuation)
+      (call-with-current-continuation
+       (lambda (cc)
+         (cc cc))))
+
+    ; spawn : (-> anything) -> void
+    (define (spawn thunk)
+      (let ((cc (current-continuation)))
+        (if (procedure? cc)
+            (set! thread-queue (append thread-queue (list cc)))
+            (begin (thunk)
+                   (quit)))))
+
+    ; yield : value -> void
+    (define (yield)
+      (let ((cc (current-continuation)))
+        (if (and (procedure? cc) (pair? thread-queue))
+            (let ((next-thread (car thread-queue)))
+              (set! thread-queue (append (cdr thread-queue) (list cc)))
+              (next-thread 'resume))
+            (void))))
+
+    ; quit : -> ...
+    (define (quit)
+      (if (pair? thread-queue)
+          (let ((next-thread (car thread-queue)))
+            (set! thread-queue (cdr thread-queue))
+            (next-thread 'resume))
+          (halt)))
+       
+    ; start-threads : -> ...
+    (define (start-threads)
+      (let ((cc (current-continuation)))
+        (if cc
+            (begin
+              (set! halt (lambda () (cc #f)))
+              (if (null? thread-queue)
+                  (void)
+                  (begin
+                    (let ((next-thread (car thread-queue)))
+                      (set! thread-queue (cdr thread-queue))
+                      (next-thread 'resume)))))
+            (void))))
+
+
+
+
+    ;; Example cooperatively threaded program
+    (define counter 10)
+
+    (define (make-thread-thunk name)
+      (letrec ((loop (lambda ()
+                       (if (< counter 0)
+                           (quit) #f)
+                       (display "in thread ")
+                       (display name)
+                       (display "; counter = ")
+                       (display counter)
+                       (newline)
+                       (set! counter (- counter 1))
+                       (yield)
+                       (loop))))
+        loop))
+
+    (spawn (make-thread-thunk 'a))
+    (spawn (make-thread-thunk 'b))
+    (spawn (make-thread-thunk 'c))
+
+    (start-threads)
+  </script>
+</body>
+</html>

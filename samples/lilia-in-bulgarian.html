@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>Lilia in Bulgarian</title>
+  <script type="text/javascript" src="/lilia-packed.js"></script>
+</head>
+<body>
+  <p>
+    View the source of the page and check the browser console for the result of the code.
+  </p>
+  <p>
+    Отворете изходния код на странциата и проверете конзолата на браузъра за резултата от изпълнението на кода на Лилия.
+  </p>
+  <pre>
+    (определи (фибоначи а)
+      (ако (< а 2)
+          а
+        (+ (фибоначи (- а 1))
+           (фибоначи (- а 2)))))
+    (покажи "Десетото число на Фибоначи е ")
+    (покажи (фибоначи 10))
+  </pre>
+  <script type="text/lilia-bg">
+    (определи (фибоначи а)
+      (ако (< а 2)
+          а
+        (+ (фибоначи (- а 1))
+           (фибоначи (- а 2)))))
+    (покажи "Десетото число на Фибоначи е ")
+    (покажи (фибоначи 10))
+  </script>
+</body>
+</html>

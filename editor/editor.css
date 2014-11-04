@@ -118,3 +118,7 @@ div#console pre {
   z-index: 100;
   max-width: 600px;
 }
+
+.link {
+  color: forestgreen;
+}
