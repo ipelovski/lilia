@@ -194,6 +194,8 @@ var data = {
     'string-ref': 'string-ref',
     'string-set!': 'string-set!',
     'string=?': 'string=?',
+    'string-append': 'string-append',
+    'substring': 'substring',
     'js-eval': 'js-eval',
     'raise': 'raise',
     'apply': 'apply',

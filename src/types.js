@@ -1,3 +1,5 @@
+'use strict';
+
 var common = require('./common');
 var guardArgsCountExact = common.guardArgsCountExact;
 var cloneEnvs = common.cloneEnvs;
@@ -157,7 +159,7 @@ function Vector(items, immutable) {
     this.value = items;
   }
   else {
-    this.value = new Array(length);  
+    this.value = new Array(length);
   }
 }
 Vector.prototype.valueOf = function valueOf() {
@@ -168,6 +170,10 @@ Vector.prototype.toString = function toString() {
 };
 Vector.create = function createVector(args, env, immutable) {
   return new Vector(args, immutable);
+};
+var EmptyList = Object.create(null);
+EmptyList.toString = function toString() {
+  return "'()";
 };
 function Pair(car, cdr, immutable) {
   this.car = car;
@@ -205,13 +211,9 @@ Pair.createList = function createList(args, env, immutable) {
 };
 Pair.isProperList = function isProperList(list) {
   while (list instanceof Pair) {
-    list = list.cdr;      
+    list = list.cdr;
   }
   return list === EmptyList;
-};
-var EmptyList = Object.create(null);
-EmptyList.toString = function toString() {
-  return "'()";
 };
 var Unspecified = Object.create(null);
 Unspecified.toString = function toString() {
@@ -228,7 +230,7 @@ SchemeError.prototype.toString = function toString() {
   }
   res += this.stack;
   return res;
-}
+};
 
 module.exports = {
   Environment: Environment,

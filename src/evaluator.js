@@ -10,7 +10,6 @@ so it needs a revision for r7rs correctness.
 
 var common = require('./common');
 var compiler = require('./compiler');
-var lexer = require('./lexer');
 var langTable = require('./lang-table');
 var types = require('./types');
 var equivalenceProcedures = require('./procedures/equivalence');
@@ -28,7 +27,6 @@ var cloneEnvs = common.cloneEnvs;
 var raiseRuntimeError = common.raiseRuntimeError;
 
 var OPTypes = compiler.OPTypes;
-var TokenTypes = lexer.TokenTypes;
 var langName = common.langName;
 
 var Environment = types.Environment;
@@ -38,12 +36,9 @@ var PrimitiveProcedure = types.PrimitiveProcedure;
 var Application = types.Application;
 var ContinuationProcedure = types.ContinuationProcedure;
 var Continuation = types.Continuation;
-var Symbol = types.Symbol;
 var SchemeString = types.SchemeString;
 var SchemeChar = types.SchemeChar;
-var Vector = types.Vector;
 var Pair = types.Pair;
-var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 var SchemeError = types.SchemeError;
 
@@ -67,7 +62,7 @@ function objectToString(obj, env) {
   }
   return obj.toString();
 }
-var primitiveFunctions = {  
+var primitiveFunctions = {
   'boolean?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return typeof args[0] === 'boolean';
@@ -111,7 +106,7 @@ var primitiveFunctions = {
   },
   'write': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
-    var obj = args[0];    
+    var obj = args[0];
     if (outputPort) {
       outputPort.emit(objectToString(obj, env));
     }
@@ -145,27 +140,12 @@ var primitiveFunctions = {
 };
 function addProceduers(env, lang, procedures) {
   for (var name in procedures) {
-    var translatedName = langTable.get(lang, 'procedures', name);
-    env.addVar(translatedName,
-      new PrimitiveProcedure(procedures[name], translatedName));
+    if (procedures.hasOwnProperty(name)) {
+      var translatedName = langTable.get(lang, 'procedures', name);
+      env.addVar(translatedName,
+        new PrimitiveProcedure(procedures[name], translatedName));
+    }
   }
-}
-function addPrimitivesAndLang(env, lang) {
-  env.addVar(langName, lang);
-  addProceduers(env, lang, primitiveFunctions);
-  addProceduers(env, lang, equivalenceProcedures);
-  addProceduers(env, lang, numberProcedures);
-  addProceduers(env, lang, pairListProcedures);
-  addProceduers(env, lang, vectorProcedures);
-  addProceduers(env, lang, stringProcedures);
-  addProceduers(env, lang, charProcedures);
-  addProceduers(env, lang, ffiProcedures);
-  addApplication(env, lang);
-  addContinuationProcedures(env, lang);
-}
-function addApplication(env, lang) {
-  var translatedName = langTable.get(lang, 'procedures', 'apply');
-  env.addVar(translatedName, new Application(translatedName));
 }
 function callcc(args, env, envs) {
   guardArgsCountExact(env, args.length, 1);
@@ -181,10 +161,29 @@ var continuationProcedures = {
 };
 function addContinuationProcedures(env, lang) {
   for (var name in continuationProcedures) {
-    var translatedName = langTable.get(lang, 'procedures', name);
-    env.addVar(translatedName,
-      new ContinuationProcedure(continuationProcedures[name], translatedName));
+    if (continuationProcedures.hasOwnProperty(name)) {
+      var translatedName = langTable.get(lang, 'procedures', name);
+      env.addVar(translatedName,
+        new ContinuationProcedure(continuationProcedures[name], translatedName));
+    }
   }
+}
+function addApplication(env, lang) {
+  var translatedName = langTable.get(lang, 'procedures', 'apply');
+  env.addVar(translatedName, new Application(translatedName));
+}
+function addPrimitivesAndLang(env, lang) {
+  env.addVar(langName, lang);
+  addProceduers(env, lang, primitiveFunctions);
+  addProceduers(env, lang, equivalenceProcedures);
+  addProceduers(env, lang, numberProcedures);
+  addProceduers(env, lang, pairListProcedures);
+  addProceduers(env, lang, vectorProcedures);
+  addProceduers(env, lang, stringProcedures);
+  addProceduers(env, lang, charProcedures);
+  addProceduers(env, lang, ffiProcedures);
+  addApplication(env, lang);
+  addContinuationProcedures(env, lang);
 }
 
 function applyArguments(formals, actualArgs, procEnv) {
@@ -193,7 +192,7 @@ function applyArguments(formals, actualArgs, procEnv) {
     procEnv.addVar(formals, Pair.createList(actualArgs));
   }
   else if (formals[formals.length - 2] === '.') {
-    if (formals.length -1 > actualArgs.length) {
+    if (formals.length - 1 > actualArgs.length) {
       raiseRuntimeError(procEnv, 'min_args_count_expected', [formals.length, actualArgs.length]);
     }
     for (i = 0; i < formals.length - 2; i++) {
@@ -209,12 +208,6 @@ function applyArguments(formals, actualArgs, procEnv) {
       procEnv.addVar(formals[i], actualArgs[i]);
     }
   }
-}
-function applySchemeProcedure(procedure, actualArgs) {
-  var formals = procedure.args;
-  var env = new Environment(procedure.env);
-  applyArguments(formals, actualArgs, env);
-  return evalOPs(procedure.body, env);
 }
 
 function peek(arr) {
@@ -393,8 +386,8 @@ function evalOPs(ops, env) {
   main:
   while (true) {
     op = ops[i];
-    if (op[0] === OPTypes.call
-      || op[0] === OPTypes.tailcall) {
+    if (op[0] === OPTypes.call ||
+      op[0] === OPTypes.tailcall) {
       var application = false;
       while (true) {
         if (envs.length >= maxEnvCount) {
@@ -402,6 +395,8 @@ function evalOPs(ops, env) {
         }
         var procedure;
         var actualArgs;
+        var applicationArgs;
+        var a, l;
         if (application) {
           actualArgs = applicationArgs;
           application = false;
@@ -410,7 +405,7 @@ function evalOPs(ops, env) {
           procedure = env.expressionStack.pop();
           var argsCount = op[1];
           actualArgs = new Array(argsCount);
-          for (var a = argsCount - 1; a >= 0; a--) {
+          for (a = argsCount - 1; a >= 0; a--) {
             actualArgs[a] = env.expressionStack.pop();
           }
         }
@@ -460,8 +455,8 @@ function evalOPs(ops, env) {
             schemeError.stack = getStack(envs);
             return schemeError;
           }
-          var applicationArgs = [];
-          for (var a = 1, l = actualArgs.length - 1; a < l; a++) {
+          applicationArgs = [];
+          for (a = 1, l = actualArgs.length - 1; a < l; a++) {
             applicationArgs.push(actualArgs[a]);
           }
           var lastArg = peek(actualArgs);
@@ -549,6 +544,12 @@ function evalOPs(ops, env) {
   }
   return env.expressionStack.pop();
 }
+function applySchemeProcedure(procedure, actualArgs) {
+  var formals = procedure.args;
+  var env = new Environment(procedure.env);
+  applyArguments(formals, actualArgs, env);
+  return evalOPs(procedure.body, env);
+}
 
 function Result(object, env) {
   this.object = object;
@@ -565,8 +566,9 @@ Result.prototype.toJS = function toJS() {
 };
 function evaluate(text, lang) {
   lang = lang || 'en';
+  var program;
   try {
-    var program = compiler.compile(text, lang);
+    program = compiler.compile(text, lang);
   }
   catch (e) {
     return new SchemeError(e.message);
@@ -594,4 +596,3 @@ exports.applySchemeProcedure = applySchemeProcedure;
 exports.evaluate = evaluate;
 exports.session = session;
 exports.setOutputPortHandler = setOutputPortHandler;
-exports.string = toString;

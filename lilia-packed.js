@@ -1,10 +1,12 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+'use strict';
+
 require('./src/common');
 var langEn = require('./src/lang-en');
 var langBg = require('./src/lang-bg');
 var evaluator = require('./src/evaluator');
 
-if (typeof window !== 'undefined'){
+if (typeof window !== 'undefined') {
   window.lilia = {
     evaluate: evaluator.evaluate,
     session: evaluator.session,
@@ -12,7 +14,46 @@ if (typeof window !== 'undefined'){
     string: evaluator.string,
     'lang-en': langEn,
     'lang-bg': langBg,
-  }
+  };
+
+  var lineContent = '';
+  var output = function (data) {
+    if (data[data.length - 1] !== '\n') {
+      lineContent += data;
+    }
+    else {
+      console.log(lineContent + data.substring(0, data.length - 1));
+      lineContent = '';
+    }
+  };
+  evaluator.setOutputPortHandler(output);
+
+  // borrowed the code from processing.js
+  var init = function () {
+    document.removeEventListener('DOMContentLoaded', init, false);
+
+    var scripts = document.getElementsByTagName('script');
+    for (var i = 0; i < scripts.length; i++) {
+      var script = scripts[i];
+      var type = script.getAttribute('type').toLowerCase();
+      var process = false;
+      var lang = 'en';
+      if (type === 'text/scheme' || type === 'text/lilia') {
+        process = true;
+      }
+      else if (type.indexOf('text/lilia-') === 0) {
+        process = true;
+        lang = type.substring('text/lilia-'.length);
+      }
+      if (process) {
+        evaluator.evaluate(script.textContent || script.text, lang);
+        if (lineContent) {
+          output('\n');
+        }
+      }
+    }
+  };
+  document.addEventListener('DOMContentLoaded', init, false);
 }
 },{"./src/common":3,"./src/evaluator":5,"./src/lang-bg":14,"./src/lang-en":15}],2:[function(require,module,exports){
 'use strict';
@@ -643,7 +684,6 @@ so it needs a revision for r7rs correctness.
 
 var common = require('./common');
 var compiler = require('./compiler');
-var lexer = require('./lexer');
 var langTable = require('./lang-table');
 var types = require('./types');
 var equivalenceProcedures = require('./procedures/equivalence');
@@ -661,7 +701,6 @@ var cloneEnvs = common.cloneEnvs;
 var raiseRuntimeError = common.raiseRuntimeError;
 
 var OPTypes = compiler.OPTypes;
-var TokenTypes = lexer.TokenTypes;
 var langName = common.langName;
 
 var Environment = types.Environment;
@@ -671,12 +710,9 @@ var PrimitiveProcedure = types.PrimitiveProcedure;
 var Application = types.Application;
 var ContinuationProcedure = types.ContinuationProcedure;
 var Continuation = types.Continuation;
-var Symbol = types.Symbol;
 var SchemeString = types.SchemeString;
 var SchemeChar = types.SchemeChar;
-var Vector = types.Vector;
 var Pair = types.Pair;
-var EmptyList = types.EmptyList;
 var Unspecified = types.Unspecified;
 var SchemeError = types.SchemeError;
 
@@ -700,7 +736,7 @@ function objectToString(obj, env) {
   }
   return obj.toString();
 }
-var primitiveFunctions = {  
+var primitiveFunctions = {
   'boolean?': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
     return typeof args[0] === 'boolean';
@@ -744,7 +780,7 @@ var primitiveFunctions = {
   },
   'write': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
-    var obj = args[0];    
+    var obj = args[0];
     if (outputPort) {
       outputPort.emit(objectToString(obj, env));
     }
@@ -778,27 +814,12 @@ var primitiveFunctions = {
 };
 function addProceduers(env, lang, procedures) {
   for (var name in procedures) {
-    var translatedName = langTable.get(lang, 'procedures', name);
-    env.addVar(translatedName,
-      new PrimitiveProcedure(procedures[name], translatedName));
+    if (procedures.hasOwnProperty(name)) {
+      var translatedName = langTable.get(lang, 'procedures', name);
+      env.addVar(translatedName,
+        new PrimitiveProcedure(procedures[name], translatedName));
+    }
   }
-}
-function addPrimitivesAndLang(env, lang) {
-  env.addVar(langName, lang);
-  addProceduers(env, lang, primitiveFunctions);
-  addProceduers(env, lang, equivalenceProcedures);
-  addProceduers(env, lang, numberProcedures);
-  addProceduers(env, lang, pairListProcedures);
-  addProceduers(env, lang, vectorProcedures);
-  addProceduers(env, lang, stringProcedures);
-  addProceduers(env, lang, charProcedures);
-  addProceduers(env, lang, ffiProcedures);
-  addApplication(env, lang);
-  addContinuationProcedures(env, lang);
-}
-function addApplication(env, lang) {
-  var translatedName = langTable.get(lang, 'procedures', 'apply');
-  env.addVar(translatedName, new Application(translatedName));
 }
 function callcc(args, env, envs) {
   guardArgsCountExact(env, args.length, 1);
@@ -814,10 +835,29 @@ var continuationProcedures = {
 };
 function addContinuationProcedures(env, lang) {
   for (var name in continuationProcedures) {
-    var translatedName = langTable.get(lang, 'procedures', name);
-    env.addVar(translatedName,
-      new ContinuationProcedure(continuationProcedures[name], translatedName));
+    if (continuationProcedures.hasOwnProperty(name)) {
+      var translatedName = langTable.get(lang, 'procedures', name);
+      env.addVar(translatedName,
+        new ContinuationProcedure(continuationProcedures[name], translatedName));
+    }
   }
+}
+function addApplication(env, lang) {
+  var translatedName = langTable.get(lang, 'procedures', 'apply');
+  env.addVar(translatedName, new Application(translatedName));
+}
+function addPrimitivesAndLang(env, lang) {
+  env.addVar(langName, lang);
+  addProceduers(env, lang, primitiveFunctions);
+  addProceduers(env, lang, equivalenceProcedures);
+  addProceduers(env, lang, numberProcedures);
+  addProceduers(env, lang, pairListProcedures);
+  addProceduers(env, lang, vectorProcedures);
+  addProceduers(env, lang, stringProcedures);
+  addProceduers(env, lang, charProcedures);
+  addProceduers(env, lang, ffiProcedures);
+  addApplication(env, lang);
+  addContinuationProcedures(env, lang);
 }
 
 function applyArguments(formals, actualArgs, procEnv) {
@@ -826,7 +866,7 @@ function applyArguments(formals, actualArgs, procEnv) {
     procEnv.addVar(formals, Pair.createList(actualArgs));
   }
   else if (formals[formals.length - 2] === '.') {
-    if (formals.length -1 > actualArgs.length) {
+    if (formals.length - 1 > actualArgs.length) {
       raiseRuntimeError(procEnv, 'min_args_count_expected', [formals.length, actualArgs.length]);
     }
     for (i = 0; i < formals.length - 2; i++) {
@@ -842,12 +882,6 @@ function applyArguments(formals, actualArgs, procEnv) {
       procEnv.addVar(formals[i], actualArgs[i]);
     }
   }
-}
-function applySchemeProcedure(procedure, actualArgs) {
-  var formals = procedure.args;
-  var env = new Environment(procedure.env);
-  applyArguments(formals, actualArgs, env);
-  return evalOPs(procedure.body, env);
 }
 
 function peek(arr) {
@@ -1026,8 +1060,8 @@ function evalOPs(ops, env) {
   main:
   while (true) {
     op = ops[i];
-    if (op[0] === OPTypes.call
-      || op[0] === OPTypes.tailcall) {
+    if (op[0] === OPTypes.call ||
+      op[0] === OPTypes.tailcall) {
       var application = false;
       while (true) {
         if (envs.length >= maxEnvCount) {
@@ -1035,6 +1069,8 @@ function evalOPs(ops, env) {
         }
         var procedure;
         var actualArgs;
+        var applicationArgs;
+        var a, l;
         if (application) {
           actualArgs = applicationArgs;
           application = false;
@@ -1043,7 +1079,7 @@ function evalOPs(ops, env) {
           procedure = env.expressionStack.pop();
           var argsCount = op[1];
           actualArgs = new Array(argsCount);
-          for (var a = argsCount - 1; a >= 0; a--) {
+          for (a = argsCount - 1; a >= 0; a--) {
             actualArgs[a] = env.expressionStack.pop();
           }
         }
@@ -1093,8 +1129,8 @@ function evalOPs(ops, env) {
             schemeError.stack = getStack(envs);
             return schemeError;
           }
-          var applicationArgs = [];
-          for (var a = 1, l = actualArgs.length - 1; a < l; a++) {
+          applicationArgs = [];
+          for (a = 1, l = actualArgs.length - 1; a < l; a++) {
             applicationArgs.push(actualArgs[a]);
           }
           var lastArg = peek(actualArgs);
@@ -1182,6 +1218,12 @@ function evalOPs(ops, env) {
   }
   return env.expressionStack.pop();
 }
+function applySchemeProcedure(procedure, actualArgs) {
+  var formals = procedure.args;
+  var env = new Environment(procedure.env);
+  applyArguments(formals, actualArgs, env);
+  return evalOPs(procedure.body, env);
+}
 
 function Result(object, env) {
   this.object = object;
@@ -1198,8 +1240,9 @@ Result.prototype.toJS = function toJS() {
 };
 function evaluate(text, lang) {
   lang = lang || 'en';
+  var program;
   try {
-    var program = compiler.compile(text, lang);
+    program = compiler.compile(text, lang);
   }
   catch (e) {
     return new SchemeError(e.message);
@@ -1227,8 +1270,7 @@ exports.applySchemeProcedure = applySchemeProcedure;
 exports.evaluate = evaluate;
 exports.session = session;
 exports.setOutputPortHandler = setOutputPortHandler;
-exports.string = toString;
-},{"./common":3,"./compiler":4,"./lang-table":16,"./lexer":17,"./procedures/char":19,"./procedures/equivalence":20,"./procedures/ffi":21,"./procedures/number":22,"./procedures/pair-list":23,"./procedures/string":24,"./procedures/vector":25,"./types":26}],6:[function(require,module,exports){
+},{"./common":3,"./compiler":4,"./lang-table":16,"./procedures/char":19,"./procedures/equivalence":20,"./procedures/ffi":21,"./procedures/number":22,"./procedures/pair-list":23,"./procedures/string":24,"./procedures/vector":25,"./types":26}],6:[function(require,module,exports){
 'use strict';
 
 var common = require('../common');
@@ -2574,6 +2616,8 @@ var data = {
     'string-ref': 'низ-вземи',
     'string-set!': 'низ-смени!',
     'string=?': 'низ=?',
+    'string-append': 'низ-добави',
+    'substring': 'подниз',
     'js-eval': 'джс-изчисли',
     'raise': 'предизвикай',
     'apply': 'приложи',
@@ -2811,6 +2855,8 @@ var data = {
     'string-ref': 'string-ref',
     'string-set!': 'string-set!',
     'string=?': 'string=?',
+    'string-append': 'string-append',
+    'substring': 'substring',
     'js-eval': 'js-eval',
     'raise': 'raise',
     'apply': 'apply',
@@ -4087,7 +4133,7 @@ var pairListProcedures = {
     var length = 0;
     while (list instanceof Pair) {
       length += 1;
-      list = list.cdr;      
+      list = list.cdr;
     }
     if (list === EmptyList) {
       return length;
@@ -4120,7 +4166,7 @@ var pairListProcedures = {
     var k = args[1];
     guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
     guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
-    var pair = args[0];    
+    var pair = args[0];
     var idx = 0;
     while (pair instanceof Pair && idx < k) {
       idx += 1;
@@ -4154,7 +4200,7 @@ var pairListProcedures = {
       list = args[i];
       if (list === EmptyList) {
         continue;
-      }        
+      }
       nextPair = new Pair(list.car, EmptyList);
       if (pair) {
         pair.cdr = nextPair;
@@ -4183,7 +4229,7 @@ var pairListProcedures = {
     var newList = EmptyList;
     while (list instanceof Pair) {
       newList = new Pair(list.car, newList);
-      list = list.cdr;      
+      list = list.cdr;
     }
     if (list === EmptyList) {
       return newList;
@@ -4255,6 +4301,7 @@ var guardArgsCountMin = common.guardArgsCountMin;
 var guardArgsCountMax = common.guardArgsCountMax;
 var guardArgPredicate = common.guardArgPredicate;
 var guardImmutable = common.guardImmutable;
+var raiseRuntimeError = common.raiseRuntimeError;
 
 var stringProcedures = {
   'string?': function (args, env) {
@@ -4277,11 +4324,12 @@ var stringProcedures = {
     return new SchemeString(arr.join(''));
   },
   'string': function (args, env) {
-    for (var i = 0; i < args.length; i++) {
+    var i;
+    for (i = 0; i < args.length; i++) {
       guardArgPredicate(env, args[i], charProcedures['char?'], i, 'procedures', 'char?');
     }
     var arr = new Array(args.length);
-    for (var i = 0; i < arr.length; i++) {
+    for (i = 0; i < arr.length; i++) {
       arr[i] = args[i].value;
     }
     return new SchemeString(arr.join(''));
@@ -4318,15 +4366,46 @@ var stringProcedures = {
   },
   'string=?': function (args, env) {
     guardArgsCountMin(env, args.length, 2);
-    for (var i = 0; i < args.length; i++) {
+    var i, l;
+    for (i = 0; i < args.length; i++) {
       guardArgPredicate(env, args[i], stringProcedures['string?'], i, 'procedures', 'string?');
     }
-    for (var i = 0, l = args.length - 1; i < l; i++) {
+    for (i = 0, l = args.length - 1; i < l; i++) {
       if (args[i].value !== args[i + 1].value) {
         return false;
       }
     }
     return true;
+  },
+  'string-append': function (args, env) {
+    var i;
+    for (i = 0; i < args.length; i++) {
+      guardArgPredicate(env, args[i], stringProcedures['string?'], i, 'procedures', 'string?');
+    }
+    var arr = [];
+    for (i = 0; i < args.length; i++) {
+      arr.push(args[i].value);
+    }
+    return new SchemeString(arr.join(''));
+  },
+  'substring': function (args, env) {
+    guardArgsCountExact(env, args.length, 3);
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
+    guardArgPredicate(env, args[1], numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
+    guardArgPredicate(env, args[2], numberProcedures['nonnegative-integer?'], 2, 'procedures', 'nonnegative-integer?');
+    var string = args[0].value;
+    var start = args[1];
+    var end = args[2];
+    if (start > string.length - 1) {
+      raiseRuntimeError(env, 'string_index_out_range', [string.length]);
+    }
+    if (end > string.length) {
+      raiseRuntimeError(env, 'string_index_out_range', [string.length]);
+    }
+    if (start > end) {
+      raiseRuntimeError(env, 'start_index_greater_end_index');
+    }
+    return new SchemeString(string.substring(start, end));
   },
 };
 
@@ -4586,6 +4665,8 @@ var vectorProcedures = {
 
 module.exports = vectorProcedures;
 },{"../common":3,"../lang-table":16,"../types":26,"./char":19,"./number":22,"./string":24}],26:[function(require,module,exports){
+'use strict';
+
 var common = require('./common');
 var guardArgsCountExact = common.guardArgsCountExact;
 var cloneEnvs = common.cloneEnvs;
@@ -4745,7 +4826,7 @@ function Vector(items, immutable) {
     this.value = items;
   }
   else {
-    this.value = new Array(length);  
+    this.value = new Array(length);
   }
 }
 Vector.prototype.valueOf = function valueOf() {
@@ -4756,6 +4837,10 @@ Vector.prototype.toString = function toString() {
 };
 Vector.create = function createVector(args, env, immutable) {
   return new Vector(args, immutable);
+};
+var EmptyList = Object.create(null);
+EmptyList.toString = function toString() {
+  return "'()";
 };
 function Pair(car, cdr, immutable) {
   this.car = car;
@@ -4793,13 +4878,9 @@ Pair.createList = function createList(args, env, immutable) {
 };
 Pair.isProperList = function isProperList(list) {
   while (list instanceof Pair) {
-    list = list.cdr;      
+    list = list.cdr;
   }
   return list === EmptyList;
-};
-var EmptyList = Object.create(null);
-EmptyList.toString = function toString() {
-  return "'()";
 };
 var Unspecified = Object.create(null);
 Unspecified.toString = function toString() {
@@ -4816,7 +4897,7 @@ SchemeError.prototype.toString = function toString() {
   }
   res += this.stack;
   return res;
-}
+};
 
 module.exports = {
   Environment: Environment,

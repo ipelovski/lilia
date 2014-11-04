@@ -192,6 +192,8 @@ var data = {
     'string-ref': 'низ-вземи',
     'string-set!': 'низ-смени!',
     'string=?': 'низ=?',
+    'string-append': 'низ-добави',
+    'substring': 'подниз',
     'js-eval': 'джс-изчисли',
     'raise': 'предизвикай',
     'apply': 'приложи',

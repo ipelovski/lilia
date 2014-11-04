@@ -144,7 +144,7 @@ var pairListProcedures = {
     var length = 0;
     while (list instanceof Pair) {
       length += 1;
-      list = list.cdr;      
+      list = list.cdr;
     }
     if (list === EmptyList) {
       return length;
@@ -177,7 +177,7 @@ var pairListProcedures = {
     var k = args[1];
     guardArgPredicate(env, args[0], pairListProcedures['pair?'], 0, 'procedures', 'pair?');
     guardArgPredicate(env, k, numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
-    var pair = args[0];    
+    var pair = args[0];
     var idx = 0;
     while (pair instanceof Pair && idx < k) {
       idx += 1;
@@ -211,7 +211,7 @@ var pairListProcedures = {
       list = args[i];
       if (list === EmptyList) {
         continue;
-      }        
+      }
       nextPair = new Pair(list.car, EmptyList);
       if (pair) {
         pair.cdr = nextPair;
@@ -240,7 +240,7 @@ var pairListProcedures = {
     var newList = EmptyList;
     while (list instanceof Pair) {
       newList = new Pair(list.car, newList);
-      list = list.cdr;      
+      list = list.cdr;
     }
     if (list === EmptyList) {
       return newList;
