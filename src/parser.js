@@ -26,7 +26,7 @@ var raiseSyntaxError = common.raiseSyntaxError;
 var syntaxCache = {};
 // Extracts values from the language tables and stores them
 // in the syntax caches.
-function populateSyntax(lang) {  
+function populateSyntax(lang) {
   var existingSyntax = syntaxCache[lang];
   if (existingSyntax) {
     return;

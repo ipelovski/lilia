@@ -1,3 +1,5 @@
+'use strict';
+
 var common = require('../common');
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgsCountMin = common.guardArgsCountMin;
@@ -29,7 +31,7 @@ var numberProcedures = {
     var x = args[0];
     return typeof x === 'number' && Math.round(x) === x && x >= 0;
   },
-  '+': function (args, env){
+  '+': function (args, env) {
     guardNumbers(env, args);
     var res = 0;
     for (var i = 0; i < args.length; i++) {
@@ -37,7 +39,7 @@ var numberProcedures = {
     }
     return res;
   },
-  '-': function (args, env){
+  '-': function (args, env) {
     guardArgsCountMin(env, args.length, 1);
     guardNumbers(env, args);
     if (args.length === 1) {
@@ -51,7 +53,7 @@ var numberProcedures = {
       return res;
     }
   },
-  '*': function (args, env){
+  '*': function (args, env) {
     guardNumbers(env, args);
     var res = 1;
     for (var i = 0; i < args.length; i++) {
@@ -59,7 +61,7 @@ var numberProcedures = {
     }
     return res;
   },
-  '/': function (args, env){
+  '/': function (args, env) {
     guardArgsCountMin(env, args.length, 1);
     guardNumbers(env, args);
     if (args.length === 1) {

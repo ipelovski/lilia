@@ -1,3 +1,5 @@
+'use strict';
+
 var common = require('../common');
 var types = require('../types');
 var langTable = require('../lang-table');
@@ -118,7 +120,7 @@ var vectorProcedures = {
     var arr = [];
     while (list instanceof Pair) {
       arr.push(list.car);
-      list = list.cdr;      
+      list = list.cdr;
     }
     if (list === EmptyList) {
       return new Vector(arr);
@@ -160,7 +162,7 @@ var vectorProcedures = {
     guardArgPredicate(env, args[1], numberProcedures['nonnegative-integer?'], 1, 'procedures', 'nonnegative-integer?');
     guardArgPredicate(env, args[2], vectorProcedures['vector?'], 2, 'procedures', 'vector?');
     var to = args[0].value;
-    var at = args[1]
+    var at = args[1];
     var from = args[2].value;
     var start = 0;
     var end = from.length;
@@ -184,19 +186,20 @@ var vectorProcedures = {
     if (start > end) {
       raiseRuntimeError(env, 'start_index_greater_end_index');
     }
-    if (to.length - at < end -start) {
+    if (to.length - at < end - start) {
       raiseRuntimeError(env, 'vector_copy_space_needed', [end - start, to.length - at]);
     }
     if (to === from && at === start) {
       return;
     }
+    var i, j;
     if (at < start) {
-      for (var i = start, j = at; i < end; i++, j++) {
+      for (i = start, j = at; i < end; i++, j++) {
         to[j] = from[i];
       }
     }
     else { // at >= start
-      for (var i = end - 1, j = at + end - start - 1; i >= start; i--, j--) {
+      for (i = end - 1, j = at + end - start - 1; i >= start; i--, j--) {
         to[j] = from[i];
       }
     }

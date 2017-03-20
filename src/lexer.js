@@ -62,12 +62,12 @@ so it needs a revision for r7rs correctness.
     // tokens in the current natural language.
     var get = function get(key) {
       return langTable.get(lang, 'tokens', key);
-    }
+    };
     // Constants containing the translations of several tokens.
     var charTrue = get('true');
     var charFalse = get('false');
     var charSpace = get('space');
-    var charNewLine = get('newline')
+    var charNewLine = get('newline');
     var charTab = get('tab');
     var whitespaceChars  = [charSpace[0], charNewLine[0], charTab[0]];
 
@@ -131,7 +131,7 @@ so it needs a revision for r7rs correctness.
       var err = new Error(message);
       err.line = line;
       err.column = column;
-      err.toString = function() {
+      err.toString = function () {
         return Error.prototype.toString.call(this) +
           ' (line: ' + this.line + ', column: ' + this.column + ')';
       };
@@ -283,8 +283,8 @@ so it needs a revision for r7rs correctness.
       raiseError('invalid_token');
     }
     // A constant holding valid escaped characters in strings like \n, \r, \t.
-    var validEscapedChars = get('valid_escaped_chars');
-    var validEscapedCharCodes = [10, 13, 9]
+    var validEscapedChars = get('valid_escaped_chars') + '"\\';
+    var validEscapedCharCodes = [10, 13, 9];
     function guardString(char) {
       if (!char) {
         raiseError('invalid_string');
@@ -295,7 +295,7 @@ so it needs a revision for r7rs correctness.
       var buffer = [];
       var char = getNextChar();
       guardString(char);
-      while(char !== '"') {
+      while (char !== '"') {
         if (char === '\\') {
           // TODO add also escaped ", \, etc
           char = getNextChar();
@@ -435,7 +435,7 @@ so it needs a revision for r7rs correctness.
       return {
         line: line,
         column: column
-      }
+      };
     }
     // Returns a token iterator.
     return {
@@ -470,7 +470,7 @@ so it needs a revision for r7rs correctness.
       this.cache.push(token);
       if (!token) {
         break;
-      }      
+      }
     }
     while (this.cache.length < idx);
     return token;
@@ -496,7 +496,7 @@ so it needs a revision for r7rs correctness.
     return token;
   };
   // Returns the position of the last consumed token.
-  TokenStream.prototype.getPosition = function() {
+  TokenStream.prototype.getPosition = function () {
     return this.tokenIterator.getPosition();
   };
 

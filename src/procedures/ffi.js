@@ -11,18 +11,39 @@ var SchemeString = types.SchemeString;
 var SchemeChar = types.SchemeChar;
 var Vector = types.Vector;
 var Pair = types.Pair;
+var PrimitiveProcedure = types.PrimitiveProcedure;
+var Procedure = types.Procedure;
+var Unspecified = types.Unspecified;
 var guardArgsCountExact = common.guardArgsCountExact;
 var guardArgPredicate = common.guardArgPredicate;
 var applySchemeProcedure = evaluator.applySchemeProcedure;
 
+function convertSchemeDictToJsObject(dict) {
+  var obj = {};
+  var list = dict, pair;
+  while (list instanceof Pair) {
+    pair = list.car;
+    obj[pair.car.toString()] = convertSchemeObjectToJs(pair.cdr);
+    list = list.cdr;
+  }
+  return obj;
+}
+function listToVector(list) {
+  var arr = [];
+  while (list instanceof Pair) {
+    arr.push(list.car);
+    list = list.cdr;
+  }
+  return new Vector(arr);
+}
 function convertSchemeObjectToJs(obj, env) {
-  if (typeof obj === 'number'
-    || typeof obj === 'boolean') {
+  if (typeof obj === 'number' ||
+      typeof obj === 'boolean') {
     return obj;
   }
-  if (obj instanceof SchemeString
-    || obj instanceof SchemeChar
-    || obj instanceof Symbol) {
+  if (obj instanceof SchemeString ||
+      obj instanceof SchemeChar ||
+      obj instanceof Symbol) {
     return obj.value;
   }
   if (obj instanceof Vector) {
@@ -49,7 +70,7 @@ function convertSchemeObjectToJs(obj, env) {
         return convertSchemeObjectToJs(arg, env);
       });
       obj.fn(args, env);
-    }
+    };
   }
   if (obj instanceof Procedure) {
     return function () {
@@ -68,8 +89,8 @@ function convertJsObjectToDcit(obj) {
   return Pair.createList(pairs);
 }
 function convertJsObjectToScheme(obj) {
-  if (typeof obj === 'number'
-    || typeof obj === 'boolean') {
+  if (typeof obj === 'number' ||
+      typeof obj === 'boolean') {
     return obj;
   }
   if (typeof obj === 'string') {
@@ -79,9 +100,9 @@ function convertJsObjectToScheme(obj) {
     return new PrimitiveProcedure(function (args, env) {
       var value = obj.apply(null, args.map(function (arg) {
         return convertSchemeObjectToJs(arg);
-      }))
+      }));
       return convertJsObjectToScheme(value);
-    })
+    });
   }
   if (typeof obj === 'object' && obj !== null) {
     if (Array.isArray(obj)) {
@@ -90,35 +111,17 @@ function convertJsObjectToScheme(obj) {
     if (obj instanceof Date) {
       return new SchemeString(obj.toString());
     }
-    if (typeof obj.constructor === 'undefined'
-      || obj.constructor.name === 'Object') {
+    if (typeof obj.constructor === 'undefined' ||
+        obj.constructor.name === 'Object') {
       return convertJsObjectToDcit(obj);
     }
   }
   return Unspecified;
 }
-function convertSchemeDictToJsObject(dict) {
-  var obj = {};
-  var list = dict, pair;
-  while (list instanceof Pair) {
-    pair = list.car;
-    obj[pair.car.toString()] = convertSchemeObjectToJs(pair.cdr);
-    list = list.cdr;      
-  }
-  return obj;
-}
-function listToVector(list) {
-  var arr = [];
-  while (list instanceof Pair) {
-    arr.push(list.car);
-    list = list.cdr;
-  }
-  return new Vector(arr);
-}
 var ffiProcedures = {
   'js-eval': function (args, env) {
     guardArgsCountExact(env, args.length, 1);
-    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');      
+    guardArgPredicate(env, args[0], stringProcedures['string?'], 0, 'procedures', 'string?');
     var value = eval(args[0].value);
     return convertJsObjectToScheme(value);
   },
