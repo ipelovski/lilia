@@ -1,5 +1,5 @@
 if (typeof lilia === 'undefined') {
-  require('./lilia');
+  require('../lilia');
 }
 var keywords = [];
 function setKeywords(lang) {

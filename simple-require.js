@@ -5,7 +5,8 @@
       return scripts[scripts.length - 1];
     })();
     var a = document.createElement('a');
-    a.href = currentScript.src;
+    a.href = window.location.href;
+    var origin = a.origin;
     var basePath = a.pathname;
     var baseDir = basePath.substring(0, basePath.lastIndexOf('/') + 1);
     var modules = {};
@@ -43,7 +44,7 @@
         return request.responseText;
       }
       else {
-        throw new Error('cannot load file');
+        throw new Error('cannot load file ' + path);
       }
     };
     var loadScript = function loadScript(path) {
@@ -55,15 +56,21 @@
     var loadModule = function loadModule(path, module) {
       var code = loadFile(path);
       // adds the code to the source view of chrome dev tools
-      code = code + '//@ sourceURL=' + path + '\n//# sourceURL=' + path;
+      code = code + '//# sourceURL=' + origin + path;
       var fn;
       try {
         fn = new Function('require', 'module', 'exports', code);
       }
-      catch (e) { // there is a syntax error in the file
-        // load the file as a script so the browser should display the location of the syntax error
-        loadScript(path);
-        return;
+      catch (e) {
+        if (e instanceof SyntaxError) {
+          // there is a syntax error in the file
+          // load the file as a script so the browser should display the location of the syntax error
+          loadScript(path);
+          return;
+        }
+        else {
+          throw e;
+        }
       }
       fn.displayName = path; // sets a friendly name for the call stack
       var exports = module.exports = {};
