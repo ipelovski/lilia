@@ -5,6 +5,9 @@ var langTable = require('./lang-table');
 var data = {
   'common': {
     'missing_entry': 'Липсва превод за език "{0}", кетегория "{1}", ключ "{2}".',
+    'anonymous': 'безименна',
+    'global': 'всеобща',
+    'error': 'Грешка',
   },
   'syntax': {
     'define': 'определи',
@@ -204,7 +207,7 @@ var data = {
     'exact_args_count_expected': 'Очакват се {0} на брой аргументи, но са подадени {1}.',
     'min_args_count_expected': 'Очакват се поне {0} на брой аргументи, но са подадени {1}.',
     'max_args_count_expected': 'Очакват се не повече от {0} на брой аргументи, но са подадени {1}.',
-    'invalid_proc': 'Невалидна функция.',
+    'invalid_proc_call': 'Очаква се функция за прилагане, но е подадено {0}.',
     'undefined_variable': 'Неопределена променлива с име "{0}".',
     'argument_predicate_false': 'Очаква се аргументът на позиция {0} да изпълнява условието {1}.',
     'mutating_immutable_object': 'Неизменими данни не могат да се променят..',

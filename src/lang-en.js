@@ -5,6 +5,9 @@ var langTable = require('./lang-table');
 var data = {
   'common': {
     'missing_entry': 'Missing translation for language "{0}", category "{1}", key "{2}".',
+    'anonymous': 'anonymous',
+    'global': 'global',
+    'error': 'Error',
   },
   'syntax': {
     'define': 'define',
@@ -206,7 +209,7 @@ var data = {
     'exact_args_count_expected': 'Expected {0} arguments, but got {1}.',
     'min_args_count_expected': 'Expected at least {0} arguments, but got {1}.',
     'max_args_count_expected': 'Expected at most {0} arguments, but got {1}.',
-    'invalid_proc': 'Invalid procedure.',
+    'invalid_proc_call': 'Expected a procedure to apply but got {0}.',
     'undefined_variable': 'Undefined variable with name "{0}".',
     'argument_predicate_false': 'Expected argument on position {0} to satisfy predicate {1}.',
     'mutating_immutable_object': 'Cannot mutate an immutable object.',

@@ -1,3 +1,5 @@
+'use strict';
+
 /*
 A module containing common functions.
 */
@@ -45,6 +47,12 @@ function guardImmutable(env, arg) {
     raiseRuntimeError(env, 'mutating_immutable_object');
   }
 }
+function guardType(env, value, typePredicate, message) {
+  if (!typePredicate([value], env)) {
+    var lang = env.getVar(langName);
+    raiseRuntimeError(env, message, [value.toString()]);
+  }
+}
 function cloneEnvs(envs) {
   return envs.map(function (env) {
     return env.clone();
@@ -83,6 +91,7 @@ module.exports = {
   guardArgsCountMax: guardArgsCountMax,
   guardArgPredicate: guardArgPredicate,
   guardImmutable: guardImmutable,
+  guardType: guardType,
   cloneEnvs: cloneEnvs,
   raiseSyntaxError: raiseSyntaxError,
   raiseRuntimeError: raiseRuntimeError,

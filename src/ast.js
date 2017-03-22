@@ -100,7 +100,7 @@ function createDefinition(identifier, value) {
 }
 // A constructor for an AST node containing an internal definition.
 function createInternalDefinition(identifiers) {
-  return createValueNode(FormTypes.internalDefinition, identifiers);
+  return createInnerNode(FormTypes.internalDefinition, identifiers);
 }
 // A constructor for an AST node containing an assignment.
 function createAssignment(identifier, value) {
@@ -133,8 +133,7 @@ function createCondElse(expressions) {
 function createCondArrow(test, expression) {
   return createInnerNode(FormTypes.condarrow,
     [createInnerNode(FormTypes.test, [test]),
-     createInnerNode(FormTypes.condarrowthen,
-       [createProcedureCall(expression, 1)])]);
+     createProcedureCall(expression, [test])]); // TODO `test` should not be reevaluated
 }
 // A constructor for an AST node containing an 'cond' conditional.
 function createCond(clauses) {
@@ -143,14 +142,8 @@ function createCond(clauses) {
 }
 // A constructor for an AST node containing a procedure call.
 function createProcedureCall(procedure, args, position) {
-  if (Array.isArray(args)) {
-    return createInnerNode(FormTypes.procedureCall,
-      [createInnerNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
-  }
-  else {
-    return createInnerNode(FormTypes.procedureCall,
-      [createValueNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
-  }
+  return createInnerNode(FormTypes.procedureCall,
+    [createInnerNode(FormTypes.arguments, args), procedure, createValueNode('position', position || null)]);
 }
 // Converts definitions into internal definitions and assignments.
 // Checks for duplicate definitions.
@@ -186,7 +179,11 @@ function transformAndCheckDefinitions(parsingInfo, forms) {
     }
   }
   traverse(forms);
-  forms.unshift(createInternalDefinition(identifiers));
+  forms.unshift(createInternalDefinition(
+    identifiers.map(identifier =>
+      createLiteral(TokenTypes.identifier, identifier)
+    )
+  ));
   return forms;
 }
 // A constructor for an AST node containing a lambda definition.
@@ -202,17 +199,11 @@ function createLambda(parsingInfo, formals, body, name) {
 }
 // A constructor for an AST node containing an 'and' expression.
 function createConjunction(tests) {
-  return createInnerNode(FormTypes.conjunction,
-    tests.map(function(test) {
-      return createInnerNode(FormTypes.test, [test]);
-    }));
+  return createInnerNode(FormTypes.conjunction, tests);
 }
 // A constructor for an AST node containing an 'or' expression.
 function createDisjunction(tests) {
-  return createInnerNode(FormTypes.disjunction,
-    tests.map(function(test) {
-      return createInnerNode(FormTypes.test, [test]);
-    }));
+  return createInnerNode(FormTypes.disjunction, tests);
 }
 // A constructor for an AST node containing a variable evaluation.
 function createVariable(identifier) {
@@ -231,9 +222,6 @@ function createBegin(forms) {
 }
 // A constructor for an AST node containing a whole program.
 function createProgram(forms) {
-  if (forms.length === 0) {
-    forms.push(createValueNode(FormTypes.void, null));
-  }
   return createInnerNode(FormTypes.program, forms);  
 }
 

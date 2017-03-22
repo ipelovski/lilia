@@ -15,20 +15,16 @@ var SchemeChar = types.SchemeChar;
 var EmptyList = types.EmptyList;
 
 var OPTypes = {
-  define: 'define',
+  add: 'add',
   set: 'set',
-  internaldefine: 'internaldefine',
-  constant: 'constant',
-  variable: 'variable',
+  get: 'get',
   jump: 'jump',
-  jumpiffalse: 'jumpiffalse',
-  jumpiffalsekeep: 'jumpiffalsekeep',
-  jumpifnotfalsekeep: 'jumpifnotfalsekeep',
-  lambda: 'lambda',
+  jumpIfFalse: 'jumpIfFalse',
   call: 'call',
   tailcall: 'tailcall',
-  discard: 'discard',
-  void: 'void',
+  literal: 'literal',
+  pop: 'pop',
+  copy: 'copy'
 };
 
 function evalListLiteral(listItems) {
@@ -87,172 +83,328 @@ function evalLiteral(literal) {
       throw new Error('Unkown type'); // TODO should raise a more user frienly error, is this code reachable?
   }
 }
-function createCallOP(opType, form) {
-  // form.nodes[0] are the procedure arguments
-  // the op argument is the number of procedure arguments
-  var args = form.nodes[0];
-  var argsCount;
-  if (args.nodes) {
-    argsCount = args.nodes.length;
-  }
-  else {
-    argsCount = args.value;
-  }
-  // the position of the procedure call in the code
-  var position = form.nodes[2].value;
-  return [opType, argsCount, position];
-}
-function analyzeForm(form, idx, conds) {
-  var op, argsCount, i, bodyCode;
+
+function analyzeForm(form, idx) {
+  var op, argsCount, i;
   switch (form.type) {
     case FormTypes.definition:
-      return [OPTypes.define];
-    case FormTypes.internalDefinition:
-      return [OPTypes.internaldefine, form.value];
+      return analyzeDefinition(form, idx);
     case FormTypes.assignment:
-      return [OPTypes.set];
+      return analyzeAssignment(form, idx);
+    case FormTypes.internalDefinition:
+      return analyzeInternalDefinition(form, idx);
     case FormTypes.literal:
-      return [OPTypes.constant, evalLiteral(form)];
+      return analyzeLiteral(form, idx);
     case FormTypes.variable:
-      return [OPTypes.variable, form.value];
-    case FormTypes.test:
-      op = [OPTypes.jumpiffalse, -1];
-      conds.push(op);
-      return op;
-    case FormTypes.ifthen:
-      op = conds.pop(); // test op, i.e. jumpiffalse
-      // jump to the next op
-      // since there is an op for this form
-      // the idx is incremented to point to the right op
-      op[1] = idx + 1;
-      op = [OPTypes.jump, -1];
-      conds.push(op);
-      return op;
-    case FormTypes.ifelse:
-      op = conds.pop(); // ifthen op, i.e. jump
-      if (!form.nodes) { // the 'if' has no 'else' clause
-        op[1] = idx + 1;
-        return [OPTypes.void];
-      }
-      else {
-        op[1] = idx; // jump to the next op
-        return null;
-      }
+      return analyzeVariable(form, idx);
     case FormTypes.ifexpr:
-      return null;
+      return analyzeIf(form, idx);
     case FormTypes.cond:
-      argsCount = form.nodes.length;
-      for (i = 0; i < argsCount; i++) {
-        op = conds.pop(); // ifthen op, i.e. jump
-        op[1] = idx + 1;
-      }
-      return [OPTypes.void];
-    case FormTypes.condarrowthen:
-      op = conds.pop(); // test op, i.e. jumpiffalse
-      op[0] = OPTypes.jumpiffalsekeep;
-      // jump to the next op
-      // since there is an op for this form
-      // the idx is incremented to point to the right op
-      op[1] = idx + 1;
-      op = [OPTypes.jump, -1];
-      conds.push(op);
-      return op;
-    case FormTypes.condclause:
-      if (form.nodes.length === 1) { // only a test clause, no then
-        op = conds[conds.length - 1]; // test op, i.e. jumpiffalse
-        op[0] = OPTypes.jumpifnotfalsekeep;
-      }
-      return null;
+      return analyzeCond(form, idx);
     case FormTypes.conjunction:
-      argsCount = form.nodes.length;
-      if (argsCount === 0) {
-        return [OPTypes.constant, true];
-      }
-      else {
-        while (argsCount > 0) {
-          op = conds.pop();
-          op[0] = OPTypes.jumpiffalsekeep;
-          op[1] = idx;
-          argsCount -= 1;
-        }
-        return null;
-      }
+      return analyzeConjunction(form, idx);
     case FormTypes.disjunction:
-      argsCount = form.nodes.length;
-      if (argsCount === 0) {
-        return [OPTypes.constant, false];
-      }
-      else {
-        while (argsCount > 0) {
-          op = conds.pop();
-          op[0] = OPTypes.jumpifnotfalsekeep;
-          op[1] = idx;
-          argsCount -= 1;
-        }
-        return null;
-      }
-    case FormTypes.arguments:
-      return null;
-    case FormTypes.procedureCall:
-      return createCallOP(OPTypes.call, form);
-    case FormTypes.tailCall:
-      return createCallOP(OPTypes.tailcall, form);
-    case FormTypes.program:
-    case FormTypes.lambdaBody:
-      return [OPTypes.discard, form.nodes.length - 1];
+      return analyzeDisjunction(form, idx);
     case FormTypes.lambda:
-      bodyCode = analyze([form.nodes[1]]);
-      return [OPTypes.lambda,
-        form.nodes[0].value, // lambda formals
-        bodyCode, // analyzed lambda body
-        form.nodes[2].value // the name of the lambda
-      ];
-    case FormTypes.void: // TODO is it used?
-      return [OPTypes.void];
+      return analyzeLambda(form, idx);
+    case FormTypes.program:
     case FormTypes.begin:
-      if (form.nodes.length > 0) {
-        return [OPTypes.discard, form.nodes.length - 1];
-      }
-      else {
-        return [OPTypes.void];
-      }
+      return analyzeSequence(form, idx);
+    case FormTypes.procedureCall:
+      return analyzeCall(OPTypes.call, form, idx);
+    case FormTypes.tailCall:
+      return analyzeCall(OPTypes.tailcall, form, idx);
     default:
-      return null;
+      throw new Error('Unkown type'); // TODO should raise a more user frienly error, is this code reachable?
   }
 }
-function traverse(forms, ops, conds) {
-  var form, op;
-  for (var i = 0; i < forms.length; i++) {
-    form = forms[i];
-    if (form.nodes && form.type !== FormTypes.lambda) {
-      traverse(form.nodes, ops, conds);
-    }
-    op = analyzeForm(form, ops.length, conds);
-    if (op) {
-      if (Array.isArray(op[0])) {
-        ops.push.apply(ops, op);
-      }
-      else {
-        ops.push(op);
-      }
-    }        
-  }
-}
-function printOps(ops) {
-  ops.forEach(function (op, idx) {
-    var type = op[0];
-    var value = '';
-    for (var i = 1; i < op.length; i++) {
-      value += op[i] + ' ';
-    }
-    console.log(idx + ' ' + type + ' ' + value);
+
+function analyzeDefinition(form, idx) {
+  var identifier = form.nodes[0];
+  var value = analyzeForm(form.nodes[1], idx + 1);
+  return value.concat({
+    type: OPTypes.add,
+    id: identifier.value.value
   });
 }
-function analyze(forms) {
+
+function analyzeAssignment(form, idx) {
+  var identifier = form.nodes[0];
+  var value = analyzeForm(form.nodes[1], idx + 1);
+  return value.concat({
+    type: OPTypes.set,
+    id: identifier.value.value
+  });
+}
+
+function analyzeInternalDefinition(form, idx) {
+  var ids = form.nodes;
+  if (ids.length > 0) {
+    var definitions = new Array(ids.length * 2 + 1);
+    for (var i = 0, j = 0; j < ids.length; i += 2, j++) {
+      definitions[i] = {
+        type: OPTypes.literal,
+        value: null
+      };
+      definitions[i + 1] = {
+        type: OPTypes.add,
+        id: ids[j].value.value
+      };
+    }
+    definitions[definitions.length - 1] = {
+      type: OPTypes.pop,
+      count: ids.length
+    };
+    return definitions;
+  } else {
+    return [];
+  }
+}
+
+function analyzeLiteral(form, idx) {
+  return [{
+    type: OPTypes.literal,
+    value: evalLiteral(form)
+  }];
+}
+
+function analyzeVariable(form, idx) {
+  return [{
+    type: OPTypes.get,
+    id: form.value
+  }];
+}
+
+function analyzeIf(form, idx) {
+  // TODO simplify the form by removing unnecessary nodes
+  // form.nodes[0].nodes[0] => form.nodes[0]
+  var test = analyzeForm(form.nodes[0].nodes[0], idx);
+  var consequent = analyzeForm(form.nodes[1].nodes[0],
+    idx + test.length + 1);
+  var alternate;
+  if (form.nodes[2].nodes !== null) {
+    alternate = analyzeForm(form.nodes[2].nodes[0],
+      idx + test.length + 1 + consequent.length + 1);
+  } else {
+    alternate = [{
+      type: OPTypes.literal,
+      value: null
+    }];
+  }
+
+  var testJumpIndex = idx + test.length +
+    1 + // the operation for test jump has two elements
+    consequent.length +
+    1; // the operation for consequent jump has two elements
+  var consequentJumpIndex = testJumpIndex + alternate.length;
+  return test
+    .concat({
+      type: OPTypes.jumpIfFalse,
+      index: testJumpIndex
+    })
+    .concat(consequent)
+    .concat({
+      type: OPTypes.jump,
+      index: consequentJumpIndex
+    })
+    .concat(alternate);
+}
+
+function analyzeCond(form, idx) {
+  // TODO simplify the form by removing unnecessary nodes
+  // clauses[i].nodes[0].nodes[0] => clauses[i].nodes[0]
+  var clauses = form.nodes;
+  var ops = [{
+    type: OPTypes.literal,
+    value: null
+  }];
+  var jumps = [];
+  for (var i = 0; i < clauses.length; i++) {
+
+    var clauseNodes = clauses[i].nodes;
+    var test = analyzeForm(clauseNodes[0].nodes[0], idx + ops.length);
+    ops = ops.concat(test);
+    if (clauseNodes.length === 1) {
+      ops.push({
+        type: OPTypes.copy
+      });
+    }
+    var testJump = {
+      type: OPTypes.jumpIfFalse,
+      index: -1
+    };
+    ops.push(testJump);
+    if (clauses[i].type === FormTypes.condarrow) {
+      var call = analyzeForm(clauseNodes[1], idx + ops.length);
+      ops = ops.concat(call);
+    } else {
+      if (clauseNodes.length > 1) {
+        var forms = analyzeSequence(clauseNodes[1].nodes[0], idx + ops.length + 1); // + 1 because of the pop op
+        ops = ops
+          .concat({
+            type: OPTypes.pop,
+            count: 1
+          })
+          .concat(forms);
+      }
+    }
+    var jump = {
+      type: OPTypes.jump,
+      index: -1
+    };
+    jumps.push(jump);
+    ops.push(jump);
+    testJump.index = idx + ops.length;
+    if (clauseNodes.length === 1) {
+      // discard the copied value at the expression stack
+      // if the test evaluates to false
+      ops.push({
+        type: OPTypes.pop,
+        count: -1
+      });
+    }
+  }
+  var jumpToEndIndex = idx + ops.length;
+  jumps.forEach(jump => jump.index = jumpToEndIndex);
+  return ops;
+}
+
+function analyzeConjunction(form, idx) {
+  var argsCount = form.nodes.length;
+  if (argsCount === 0) {
+    return [{
+      type: OPTypes.literal,
+      value: true
+    }];
+  } else {
+    var ops = [];
+    var jumps = [];
+    for (var i = 0; i < argsCount; i++) {
+      var test = analyzeForm(form.nodes[i], idx + ops.length);
+      ops = ops.concat(test);
+      ops.push({
+        type: OPTypes.copy
+      });
+      var jump = {
+        type: OPTypes.jumpIfFalse,
+        index: -1
+      };
+      jumps.push(jump);
+      ops.push(jump);
+    }
+    var jumpToEndIndex = idx + ops.length;
+    jumps.forEach(jump => jump.index = jumpToEndIndex);
+    return ops;
+  }
+}
+
+function analyzeDisjunction(form, idx) {
+  var argsCount = form.nodes.length;
+  if (argsCount === 0) {
+    return [{
+      type: OPTypes.literal,
+      value: false
+    }];
+  } else {
+    var ops = [];
+    var jumps = [];
+    for (var i = 0; i < argsCount; i++) {
+      var test = analyzeForm(form.nodes[i], idx + ops.length);
+      ops = ops.concat(test);
+      ops.push({
+        type: OPTypes.copy
+      });
+      ops.push({
+        type: OPTypes.jumpIfFalse,
+        index: idx + ops.length + 2 // the current op and the next jump op
+      });
+      var jump = {
+        type: OPTypes.jump,
+        index: -1
+      };
+      jumps.push(jump);
+      ops.push(jump);
+    }
+    var jumpToEndIndex = idx + ops.length;
+    jumps.forEach(jump => jump.index = jumpToEndIndex);
+    return ops;
+  }
+}
+
+function analyzeLambda(form, idx) {
+  var bodyCode = analyzeSequence(form.nodes[1], 0);
+  return [{
+    type: OPTypes.literal,
+    value: {
+      type: 'lambda',
+      value: {
+        args: form.nodes[0].value, // lambda formals
+        body: bodyCode, // analyzed lambda body
+        name: form.nodes[2].value // the name of the lambda
+      }
+    }
+  }];
+}
+
+function analyzeSequence(form, idx) {
+  var nodes = form.nodes;
+  var nodesCount = nodes.length;
+  if (nodesCount > 0) {
+    var ops = traverse(nodes, idx);
+    if (nodesCount > 1) {
+      ops.push({
+        type: OPTypes.pop,
+        count: nodesCount - 1
+      });
+    }
+    return ops;
+  } else {
+    return [{
+      type: OPTypes.literal,
+      value: null
+    }];
+  }
+}
+
+function analyzeCall(callType, form, idx) {
+  var args = form.nodes[0].nodes;
+  var argValues = [];
+  for (var i = 0; i < args.length; i++) {
+    argValues = argValues.concat(analyzeForm(args[i], idx + argValues.length));
+  }
+  var argsCount = args.length;
+  var procedure = analyzeForm(form.nodes[1], idx + argValues.length);
+  // the position of the procedure call in the code
+  var position = form.nodes[2].value;
+  return argValues
+    .concat(procedure)
+    .concat({
+      type: callType,
+      argsCount: argsCount,
+      position: position
+    });
+}
+
+function traverse(forms, idx) {
+  var form, op;
   var ops = [];
-  var conds = [];
-  traverse(forms, ops, conds);   
-  // printOps(ops);
+  for (var i = 0; i < forms.length; i++) {
+    form = forms[i];
+    op = analyzeForm(form, idx + ops.length);
+    ops = ops.concat(op);
+  }
+  return ops;
+}
+
+function printOps(ops) {
+  ops.forEach(function (op, idx) {
+    console.log(idx, op.type, op);
+  });
+}
+
+function analyze(forms) {
+  var ops = traverse(forms, 0);
+  printOps(ops);
   return ops;
 }
 

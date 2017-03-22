@@ -219,18 +219,6 @@ var Unspecified = Object.create(null);
 Unspecified.toString = function toString() {
   return '';
 };
-function SchemeError(message) {
-  this.message = message || '';
-  this.stack = null;
-}
-SchemeError.prototype.toString = function toString() {
-  var res = 'Error: '; // TODO localize
-  if (this.message) {
-    res += this.message + '\n';
-  }
-  res += this.stack;
-  return res;
-};
 
 module.exports = {
   Environment: Environment,
@@ -247,5 +235,4 @@ module.exports = {
   Pair: Pair,
   EmptyList: EmptyList,
   Unspecified: Unspecified,
-  SchemeError: SchemeError,
 };

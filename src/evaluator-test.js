@@ -94,6 +94,19 @@ module.exports = {
               ((< a 0) (set! a -1) (+ a 1))\n\
               ((> a 0))\n\
               ((= a 0) #f))', true),
+        'should eval cond with only test at the end':
+          testOK('\n\
+            (define a 0)\n\
+            (cond\n\
+              ((< a 0) (set! a -1) (+ a 1))\n\
+              ((> a 0) #f)\n\
+              ((= a 0)))', true),
+        'should eval cond with only test at the end 2':
+          testOK('\n\
+            (define a 0)\n\
+            (cond\n\
+              ((< a 0) (set! a -1) (+ a 1))\n\
+              ((> a 0)))', ''),
         'should eval cond with else':
           testOK('\n\
             (define a 1)\n\
@@ -113,8 +126,8 @@ module.exports = {
             (define a 1)\n\
             (cond\n\
               ((< a 0) => number?)\n\
-              ((> a 0) => (lambda (x) x))\n\
-              (else (set! a 10) 5))', true),
+              ((> a 0) => (lambda (x) (if x 1 0)))\n\
+              (else (set! a 10) 5))', 1),
       },
     },
     'let': {
