@@ -189,7 +189,7 @@ function init(lang) {
   session = lilia.session(lang);
   setKeywords(lang);
 }
-init('en');
+init('bg');
 
 function runScheme() {
   var input = codeEditor.getValue();

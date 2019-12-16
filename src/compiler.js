@@ -404,7 +404,7 @@ function printOps(ops) {
 
 function analyze(forms) {
   var ops = traverse(forms, 0);
-  printOps(ops);
+  // printOps(ops);
   return ops;
 }
 

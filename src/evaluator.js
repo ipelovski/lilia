@@ -18,6 +18,7 @@ var pairListProcedures = require('./procedures/pair-list');
 var vectorProcedures = require('./procedures/vector');
 var stringProcedures = require('./procedures/string');
 var charProcedures = require('./procedures/char');
+var symbolProcedures = require('./procedures/symbol');
 var ffi = require('./procedures/ffi');
 
 var guardArgsCountExact = common.guardArgsCountExact;
@@ -195,6 +196,7 @@ function addPrimitivesAndLang(env, lang) {
   addProceduers(env, lang, vectorProcedures);
   addProceduers(env, lang, stringProcedures);
   addProceduers(env, lang, charProcedures);
+  addProceduers(env, lang, symbolProcedures);
   addProceduers(env, lang, ffiProcedures);
   addApplication(env, lang);
   addContinuationProcedures(env, lang);
@@ -416,21 +418,7 @@ function evalOPs(ops, env) {
       actualArgs[a] = env.expressionStack.pop();
     }
 
-    if (procedure instanceof PrimitiveProcedure) {
-      applyPrimitiveProcedure(procedure, actualArgs);
-    }
-    else if (procedure instanceof Procedure) {
-      applyUserProcedure(procedure, actualArgs);
-    }
-    else if (procedure instanceof Application) {
-      applyApplication(procedure, actualArgs);
-    }
-    else if (procedure instanceof ContinuationProcedure) {
-      applyContinuationProcedure(procedure, actualArgs);
-    }
-    else if (procedure instanceof Continuation) {
-      applyContinuation(procedure, actualArgs);
-    }
+    applyKnownProcedure(procedure, actualArgs);
   }
 
   function applyUserProcedure(procedure, actualArgs) {
@@ -464,6 +452,24 @@ function evalOPs(ops, env) {
     env.expressionStack.push(value);
     idx = -1;
   }
+
+  function applyKnownProcedure(procedure, actualArgs) {
+    if (procedure instanceof PrimitiveProcedure) {
+      applyPrimitiveProcedure(procedure, actualArgs);
+    }
+    else if (procedure instanceof Procedure) {
+      applyUserProcedure(procedure, actualArgs);
+    }
+    else if (procedure instanceof Application) {
+      applyApplication(procedure, actualArgs);
+    }
+    else if (procedure instanceof ContinuationProcedure) {
+      applyContinuationProcedure(procedure, actualArgs);
+    }
+    else if (procedure instanceof Continuation) {
+      applyContinuation(procedure, actualArgs);
+    }
+  }
   
   function applyApplication(procedure, actualArgs) {
     createProcedureEnv(procedure);
@@ -471,7 +477,7 @@ function evalOPs(ops, env) {
     guardArgPredicate(env, procedure, primitiveFunctions['procedure?'], 0, 'procedures', 'procedure?');
     var applicationArgs = [];
     if (actualArgs.length > 1) {
-      for (a = 1, l = actualArgs.length - 1; a < l; a++) {
+      for (var a = 1, l = actualArgs.length - 1; a < l; a++) {
         applicationArgs.push(actualArgs[a]);
       }
       var lastArg = peek(actualArgs);
@@ -483,9 +489,7 @@ function evalOPs(ops, env) {
         applicationArgs.push(lastArg);
       }
     }
-    applyProcedure(procedure, applicationArgs);
-    envs.pop();
-    env = peek(envs);
+    applyKnownProcedure(procedure, applicationArgs);
   }
   
   function applyContinuationProcedure(procedure, actualArgs) {
