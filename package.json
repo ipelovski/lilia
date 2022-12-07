@@ -23,9 +23,9 @@
   "readmeFilename": "README.md",
   "gitHead": "b02a6ad7620fe6f429de890ed033e5814a135bfa",
   "dependencies": {
-    "body-parser": "^1.9.0",
+    "body-parser": "^1.20.1",
     "connect": "^3.2.0",
-    "http-server": "^0.11.1",
+    "http-server": "^0.11.2",
     "marked": "^0.3.2",
     "serve-static": "^1.6.3"
   }
